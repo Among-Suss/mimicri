@@ -7,6 +7,7 @@
 //! features = ["client", "standard_framework", "voice"]
 //! ```
 use std::env;
+use dotenv::dotenv;
 
 // This trait adds the `register_songbird` and `register_songbird_with` methods
 // to the client builder below, making it easy to install this voice client.
@@ -49,6 +50,8 @@ async fn main() {
     tracing_subscriber::fmt::init();
     
     // Configure the client with your Discord bot token in the environment.
+    dotenv().ok();
+
     let token = env::var("DISCORD_TOKEN")
         .expect("Expected a token in the environment");
 
