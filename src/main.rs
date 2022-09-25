@@ -55,9 +55,12 @@ async fn main() {
     let token = env::var("DISCORD_TOKEN")
         .expect("Expected a token in the environment");
 
+    let prefix = env::var("BOT_PREFIX")
+        .unwrap_or("~".to_owned());
+
     let framework = StandardFramework::new()
         .configure(|c| c
-                   .prefix("~"))
+                   .prefix(prefix))
         .group(&GENERAL_GROUP);
 
     let intents = GatewayIntents::non_privileged()
