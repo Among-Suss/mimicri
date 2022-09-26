@@ -7,6 +7,7 @@
 //! features = ["client", "standard_framework", "voice"]
 //! ```
 mod play;
+mod media;
 
 use dotenv::dotenv;
 use std::env;
