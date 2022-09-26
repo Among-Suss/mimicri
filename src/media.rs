@@ -1,17 +1,17 @@
 use serenity::async_trait;
 use serenity::prelude::Mutex;
 use serenity::model::prelude::GuildId;
+use songbird::tracks::TrackHandle;
 use songbird::{Call, EventHandler, EventContext, Event};
 use std::collections::{LinkedList, HashMap};
-use std::sync::{Arc};
-use async_std::sync::Condvar;
+use std::sync::Arc;
 
 pub struct MediaEventHandler {
-    signaler: Arc<(async_std::sync::Mutex<bool>, Condvar)>,
+    signaler: Arc<(async_std::sync::Mutex<bool>, async_std::sync::Condvar)>,
 }
 
 impl MediaEventHandler {
-    fn new(signaler: Arc<(async_std::sync::Mutex<bool>, Condvar)>) -> Self {
+    fn new(signaler: Arc<(async_std::sync::Mutex<bool>, async_std::sync::Condvar)>) -> Self {
         MediaEventHandler { signaler }
     }
 }
@@ -25,13 +25,13 @@ pub struct MediaItem {
 }
 
 pub struct MediaQueue {
-    pub now_playing: Option<MediaItem>,
+    pub now_playing: Option<(MediaItem, TrackHandle)>,
     pub queue: LinkedList<MediaItem>,
 }
 
 pub struct ChannelMediaPlayer {
     pub guild_id: GuildId,
-    pub shared_media_queue: Arc<(Mutex<MediaQueue>, Condvar)>,
+    pub shared_media_queue: Arc<(Mutex<MediaQueue>, async_std::sync::Condvar)>,
 }
 
 #[async_trait]
@@ -49,25 +49,25 @@ impl EventHandler for MediaEventHandler {
 
 pub async fn run_media_player(
     voice_channel_handler: Arc<Mutex<Call>>, 
-    shared_media_queue: Arc<(async_std::sync::Mutex<MediaQueue>, Condvar)>
+    shared_media_queue: Arc<(async_std::sync::Mutex<MediaQueue>, async_std::sync::Condvar)>
 ){
 
     let (shared_media_queue_lock, shared_media_queue_condvar) = &*shared_media_queue;
 
     loop {
-        let end_signaler = Arc::new((async_std::sync::Mutex::new(false), Condvar::new()));
-        println!("START LOOP");
+
+        let end_signaler = Arc::new((async_std::sync::Mutex::new(false), async_std::sync::Condvar::new()));
+
         {
+
             // lock and wait for song queue to not be empty
             let mut shared_media_queue = shared_media_queue_lock.lock().await;
             while shared_media_queue.queue.is_empty() {
-                println!("WAITING FOR SONG");
                 shared_media_queue = shared_media_queue_condvar.wait(shared_media_queue).await;
             }
 
-            println!("START PLAYING SONG");
-
             // get song from queue and create source, track, trackhandle
+            // set current song
             let next_song = shared_media_queue.queue.pop_back().unwrap();
             let source = match songbird::ytdl(&next_song.url).await {
                 Ok(source) => source,
@@ -76,6 +76,7 @@ pub async fn run_media_player(
                 }
             };
             let (track, track_handle) = songbird::create_player(source);
+            shared_media_queue.now_playing = Some((next_song, track_handle.clone()));
             
             // create a condvar to signal the end of the song
             // give the condvar to media event handler
@@ -86,6 +87,7 @@ pub async fn run_media_player(
             // play the track
             let mut vc_handler = voice_channel_handler.lock().await;
             vc_handler.play(track);
+
         }
         
         // wait for song to finish
@@ -94,7 +96,9 @@ pub async fn run_media_player(
         while !*end_guard {
             end_guard = end_condvar.wait(end_guard).await;
         }
+
     }
+
 }
 
 
