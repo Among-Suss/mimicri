@@ -9,6 +9,7 @@ edition = "2021"
 tracing = "0.1"
 tracing-subscriber = "0.2"
 tracing-futures = "0.2"
+crossbeam = "0.8"
 
 [dependencies.songbird]
 version = "0.3"
