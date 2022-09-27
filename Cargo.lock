@@ -1031,6 +1031,8 @@ dependencies = [
  "async-std",
  "crossbeam",
  "dotenv",
+ "serde",
+ "serde_json",
  "serenity",
  "songbird",
  "tokio",

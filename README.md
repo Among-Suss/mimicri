@@ -16,6 +16,12 @@ A Discord music bot that spies on you (very sus).
   - [ ] Randomized songs
 
 ## Setup
+
+### Dependencies
+ - youtube-dl
+ - ffmpeg
+
+### Config
 Create a `.env` file in the root directory, and add the following variables:
 ```sh
 DISCORD_TOKEN = *your bot token*

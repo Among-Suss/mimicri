@@ -6,8 +6,9 @@
 //! git = "https://github.com/serenity-rs/serenity.git"
 //! features = ["client", "standard_framework", "voice"]
 //! ```
-mod play;
 mod media;
+mod play;
+mod playlist;
 
 use dotenv::dotenv;
 use std::env;
