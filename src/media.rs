@@ -1,6 +1,7 @@
 use serenity::async_trait;
+use serenity::http::{Http, request};
 use serenity::prelude::Mutex;
-use serenity::model::prelude::GuildId;
+use serenity::model::prelude::{GuildId, Message};
 use songbird::tracks::TrackHandle;
 use songbird::{Call, EventHandler, EventContext, Event};
 use std::collections::{LinkedList, HashMap};
@@ -22,6 +23,9 @@ pub struct MediaItem {
     pub duration: i64,
     pub description: String,
     pub metadata: HashMap<String, String>,
+
+    pub request_msg_channel: serenity::model::prelude::ChannelId,
+    pub http: Arc<Http>,
 }
 
 pub struct MediaQueue {
@@ -54,7 +58,7 @@ pub async fn run_media_player(
 
     let (shared_media_queue_lock, shared_media_queue_condvar) = &*shared_media_queue;
 
-    loop {
+    'medialoop: loop {
 
         let end_signaler = Arc::new((async_std::sync::Mutex::new(false), async_std::sync::Condvar::new()));
 
@@ -69,10 +73,16 @@ pub async fn run_media_player(
             // get song from queue and create source, track, trackhandle
             // set current song
             let next_song = shared_media_queue.queue.pop_back().unwrap();
+            let request_msg_channel = next_song.request_msg_channel;
+            let request_msg_http = next_song.http.clone();
             let source = match songbird::ytdl(&next_song.url).await {
                 Ok(source) => source,
                 Err(why) => {
-                    panic!("ERROR; THIS SHOULD BE FIXED")
+                    println!("Error creating source: {:?}", why);
+
+                    check_msg(request_msg_channel.say(&request_msg_http, "Error playing track: youtube-dl or ffmpeg failed").await);
+    
+                    continue 'medialoop;
                 }
             };
             let (track, track_handle) = songbird::create_player(source);
@@ -82,7 +92,16 @@ pub async fn run_media_player(
             // give the condvar to media event handler
             // register thee handler
             let media_event_handler :MediaEventHandler = MediaEventHandler::new(end_signaler.clone());
-            track_handle.add_event(songbird::Event::Track(songbird::TrackEvent::End), media_event_handler);
+            match track_handle.add_event(songbird::Event::Track(songbird::TrackEvent::End), media_event_handler) {
+                Ok(_) => (),
+                Err(err) => {
+                    println!("Error on track_handle.add_event {:?}", err);
+
+                    check_msg(request_msg_channel.say(&request_msg_http, "Error playing track: Unable to initialize TrackEvent handler.").await);
+
+                    continue 'medialoop;
+                },
+            }
 
             // play the track
             let mut vc_handler = voice_channel_handler.lock().await;
@@ -102,3 +121,9 @@ pub async fn run_media_player(
 }
 
 
+/// Checks that a message successfully sent; if not, then logs why to stdout.
+fn check_msg(result: Result<Message, serenity::Error>) {
+    if let Err(why) = result {
+        println!("Error sending message: {:?}", why);
+    }
+}
