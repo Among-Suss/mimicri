@@ -90,8 +90,7 @@ mod tests {
         #[test]
         fn success_page() {
             let sources = get_playlist_sources(
-                "https://www.youtube.com/playlist?list=PLdY_Mca8fL_BbtQrKu9lm-LcCcY-t2mVS"
-                    .to_string(),
+                "https://www.youtube.com/playlist?list=PLdY_Mca8fL_BbtQrKu9lm-LcCcY-t2mVS".to_string(),
             )
             .unwrap();
 
@@ -103,10 +102,9 @@ mod tests {
         #[test]
         fn success_video() {
             let sources = get_playlist_sources(
-            "https://www.youtube.com/watch?v=nBpgoga0FZ4&list=PLdY_Mca8fL_BbtQrKu9lm-LcCcY-t2mVS"
-                .to_string(),
-        )
-        .unwrap();
+                "https://www.youtube.com/watch?v=nBpgoga0FZ4&list=PLdY_Mca8fL_BbtQrKu9lm-LcCcY-t2mVS".to_string()
+            ) 
+            .unwrap();
 
             for source in sources.iter() {
                 assert!(!source.is_empty())
