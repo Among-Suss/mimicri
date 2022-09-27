@@ -50,7 +50,6 @@ pub fn get_playlist_sources(url: String) -> Result<Vec<String>, &'static str> {
     }
 }
 
-#[derive(Debug)]
 pub struct Timestamp {
     seconds: i32,
     label: String,
@@ -85,55 +84,98 @@ pub fn get_timestamps(description: String) -> Vec<Timestamp> {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
+    mod playlist {
+        use super::super::get_playlist_sources;
 
-    #[test]
-    fn playlist_success_page() {
-        let sources = get_playlist_sources(
-            "https://www.youtube.com/playlist?list=PLdY_Mca8fL_BbtQrKu9lm-LcCcY-t2mVS".to_string(),
-        )
-        .unwrap();
+        #[test]
+        fn success_page() {
+            let sources = get_playlist_sources(
+                "https://www.youtube.com/playlist?list=PLdY_Mca8fL_BbtQrKu9lm-LcCcY-t2mVS"
+                    .to_string(),
+            )
+            .unwrap();
 
-        for source in sources.iter() {
-            assert!(!source.is_empty())
+            for source in sources.iter() {
+                assert!(!source.is_empty())
+            }
         }
-    }
 
-    #[test]
-    fn playlist_success_video() {
-        let sources = get_playlist_sources(
+        #[test]
+        fn success_video() {
+            let sources = get_playlist_sources(
             "https://www.youtube.com/watch?v=nBpgoga0FZ4&list=PLdY_Mca8fL_BbtQrKu9lm-LcCcY-t2mVS"
                 .to_string(),
         )
         .unwrap();
 
-        for source in sources.iter() {
-            assert!(!source.is_empty())
+            for source in sources.iter() {
+                assert!(!source.is_empty())
+            }
+        }
+
+        #[test]
+        fn fail_video_url() {
+            let sources =
+                get_playlist_sources("https://www.youtube.com/watch?v=6YBDo5S8soo".to_string())
+                    .unwrap();
+
+            assert_eq!(sources.len(), 1);
+        }
+
+        #[test]
+        fn fail_not_url() {
+            let sources = get_playlist_sources("amogus".to_string()).unwrap();
+
+            assert!(sources.is_empty());
         }
     }
 
-    #[test]
-    fn playlist_fail_video_url() {
-        let sources =
-            get_playlist_sources("https://www.youtube.com/watch?v=6YBDo5S8soo".to_string())
-                .unwrap();
+    mod timestamp {
+        use super::super::get_timestamps;
 
-        assert_eq!(sources.len(), 1);
-    }
+        #[test]
+        fn single_line() {
+            let timestamps = get_timestamps("3:23 My description".to_string());
 
-    #[test]
-    fn playlist_fail_not_url() {
-        let sources = get_playlist_sources("amogus".to_string()).unwrap();
+            assert!(timestamps[0].label.eq("My description"));
+            assert!(timestamps[0].timestamp.eq("3:23"));
+            assert_eq!(timestamps[0].seconds, 3 * 60 + 23);
+        }
 
-        assert!(sources.is_empty());
-    }
+        #[test]
+        fn mid_line() {
+            let timestamps = get_timestamps("Words to ignore 5:55 My description".to_string());
 
-    #[test]
-    fn timestamps_single_line() {
-        let timestamps = get_timestamps("3:23 My description".to_string());
+            assert!(timestamps[0].label.eq("My description"));
+            assert!(timestamps[0].timestamp.eq("5:55"));
+            assert_eq!(timestamps[0].seconds, 5 * 60 + 55);
+        }
 
-        assert!(timestamps[0].label.eq("My description"));
-        assert!(timestamps[0].timestamp.eq("3:23"));
-        assert_eq!(timestamps[0].seconds, 3 * 60 + 23);
+        #[test]
+        fn multi_line() {
+            let timestamps = get_timestamps("3:23 My description\n1:6:34 Other desc".to_string());
+
+            assert!(timestamps[0].label.eq("My description"));
+            assert!(timestamps[0].timestamp.eq("3:23"));
+            assert_eq!(timestamps[0].seconds, 3 * 60 + 23);
+
+            assert!(timestamps[1].label.eq("Other desc"));
+            assert!(timestamps[1].timestamp.eq("1:6:34"));
+            assert_eq!(timestamps[1].seconds, 1 * 3600 + 6 * 60 + 34);
+        }
+
+        #[test]
+        fn empty() {
+            let timestamps = get_timestamps("".to_string());
+
+            assert_eq!(timestamps.len(), 0);
+        }
+
+        #[test]
+        fn no_timestamps() {
+            let timestamps = get_timestamps("Hi there\n23 susser\nimposter".to_string());
+
+            assert_eq!(timestamps.len(), 0);
+        }
     }
 }
