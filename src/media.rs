@@ -52,7 +52,7 @@ impl EventHandler for MediaEventHandler {
 }
 
 pub async fn media_player_skip(
-    shared_channel_media_player: Arc<ChannelMediaPlayer>
+    shared_channel_media_player: &Arc<ChannelMediaPlayer>
 ){
     let (shared_media_queue_lock, _) = &shared_channel_media_player.lock_protected_media_queue;
     let smq_locked = shared_media_queue_lock.lock().await;
@@ -74,7 +74,7 @@ pub async fn media_player_enqueue(
     url: String, 
     request_msg_channel: serenity::model::prelude::ChannelId,
     request_msg_http: Arc<Http>,
-    shared_channel_media_player: Arc<ChannelMediaPlayer>
+    shared_channel_media_player: &Arc<ChannelMediaPlayer>
 ){
     let (shared_media_queue_lock, shared_media_queue_condvar) = &shared_channel_media_player.lock_protected_media_queue;
 

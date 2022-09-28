@@ -49,7 +49,7 @@ pub async fn queue_url(
     let guild_map = guild_map_guard.as_mut().unwrap();
 
     if let Some(media_player) = guild_map.get(&guild_id) {
-        media::media_player_enqueue(url, request_msg_channel, request_msg_http, media_player.clone()).await;
+        media::media_player_enqueue(url, request_msg_channel, request_msg_http, &media_player).await;
     } else {
         return Err("Not connected to a voice channel!");
     }

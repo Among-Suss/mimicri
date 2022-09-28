@@ -353,7 +353,7 @@ async fn skip(ctx: &Context, msg: &Message) -> CommandResult {
     let guild_map = guild_map_guard.as_mut().unwrap();
 
     if let Some(media_player) = guild_map.get(&guild_id) {
-        media::media_player_skip(media_player.clone()).await;
+        media::media_player_skip(&media_player).await;
     } else {
         check_msg(msg.reply(ctx, "Not connected to a voice channel!").await);
     }
