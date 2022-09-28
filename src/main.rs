@@ -56,13 +56,15 @@ static GUILD_MEDIA_PLAYER_MAP: GuildMediaPlayerMap = async_std::sync::Mutex::new
 
 #[tokio::main]
 async fn main() {
-    let mut guild_map = GUILD_MEDIA_PLAYER_MAP.lock().await;
-    match &*guild_map {
-        Some(_) => panic!("HashMap should be uninitialized!"),
-        None => *guild_map = Some(
-            HashMap::new()
-        ),
-    };
+    {
+        let mut guild_map = GUILD_MEDIA_PLAYER_MAP.lock().await;
+        match &*guild_map {
+            Some(_) => panic!("HashMap should be uninitialized!"),
+            None => *guild_map = Some(
+                HashMap::new()
+            ),
+        };
+    }
 
     tracing_subscriber::fmt::init();
 
