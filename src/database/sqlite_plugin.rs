@@ -1,3 +1,5 @@
+use std::env;
+
 use sqlite::OpenFlags;
 
 use super::database::DatabasePlugin;
@@ -9,30 +11,44 @@ const PLAYLIST_MAP_TABLE: &str = "playlists_map";
 
 const HISTORY_PLAYLIST: &str = "_history";
 
-pub struct SQLLitePlugin {
-    pub path: &'static str,
+pub struct SQLitePlugin {
+    pub path: String,
 }
 
-impl SQLLitePlugin {
+impl SQLitePlugin {
     fn get_connection(&self) -> Result<sqlite::Connection, sqlite::Error> {
         sqlite::Connection::open_with_flags(
-            self.path,
+            self.path.clone(),
             OpenFlags::new()
                 .set_create()
                 .set_read_write()
                 .set_full_mutex(),
         )
     }
-}
 
-impl Default for SQLLitePlugin {
-    fn default() -> Self {
-        SQLLitePlugin { path: "mimicri.db" }
+    fn is_disabled(&self) -> bool {
+        self.path.eq("")
     }
 }
 
-impl DatabasePlugin for SQLLitePlugin {
+impl Default for SQLitePlugin {
+    fn default() -> Self {
+        let db = env::var("PLUGIN_SQLITE").unwrap_or("".to_string());
+
+        if db.eq("") {
+            println!("[sqlite] Env var PLUGIN_SQLITE not set, disabling sqlite plugin");
+        }
+
+        SQLitePlugin { path: db }
+    }
+}
+
+impl DatabasePlugin for SQLitePlugin {
     fn init_db(&self) {
+        if self.is_disabled() {
+            return;
+        }
+
         let connection = match self.get_connection() {
             Err(err) => {
                 println!("[sqlite] {}", err.message.unwrap_or_default());
@@ -95,6 +111,10 @@ impl DatabasePlugin for SQLLitePlugin {
     }
 
     fn playlist_create(&self, user_id: u64, name: String) -> Result<(), &'static str> {
+        if self.is_disabled() {
+            return Ok(());
+        }
+
         let connection = match self.get_connection() {
             Ok(c) => c,
             Err(err) => {
@@ -123,6 +143,10 @@ impl DatabasePlugin for SQLLitePlugin {
         Ok(())
     }
     fn playlist_remove(&self, user_id: u64, name: String) -> Result<(), &'static str> {
+        if self.is_disabled() {
+            return Ok(());
+        }
+
         todo!()
     }
 
@@ -132,6 +156,10 @@ impl DatabasePlugin for SQLLitePlugin {
         name: String,
         url: String,
     ) -> Result<(), &'static str> {
+        if self.is_disabled() {
+            return Ok(());
+        }
+
         let connection = match self.get_connection() {
             Ok(c) => c,
             Err(err) => {
@@ -169,10 +197,18 @@ impl DatabasePlugin for SQLLitePlugin {
         name: String,
         url: String,
     ) -> Result<(), &'static str> {
+        if self.is_disabled() {
+            return Ok(());
+        }
+
         todo!()
     }
 
     fn remove_song(&self, url: String) -> Result<(), &'static str> {
+        if self.is_disabled() {
+            return Ok(());
+        }
+
         todo!()
     }
 }
@@ -185,12 +221,24 @@ mod tests {
 
     const TEST_DB: &str = "test.db";
 
-    fn mock_db_plugin() -> SQLLitePlugin {
+    fn mock_db_plugin() -> SQLitePlugin {
         let _ = remove_file(TEST_DB);
 
-        let plugin = SQLLitePlugin { path: TEST_DB };
+        let plugin = SQLitePlugin {
+            path: TEST_DB.to_string(),
+        };
         plugin.init_db();
         plugin
+    }
+
+    #[test]
+    fn disabled() {
+        let plugin = SQLitePlugin {
+            path: "".to_string(),
+        };
+        plugin.init_db();
+
+        assert!(plugin.history_set(1, "url".to_string()).is_ok());
     }
 
     #[test]

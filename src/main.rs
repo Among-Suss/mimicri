@@ -40,7 +40,7 @@ use serenity::{
 };
 
 use crate::{
-    database::{database::DatabasePluginInit, sqlite_plugin::SQLLitePlugin},
+    database::{database::DatabasePluginInit, sqlite_plugin::SQLitePlugin},
     play::{queue_search, queue_url},
 };
 
@@ -92,7 +92,7 @@ async fn main() {
         .event_handler(Handler)
         .framework(framework)
         .register_songbird()
-        .register_database_plugin(Arc::new(SQLLitePlugin { path: "mimicri.db" }))
+        .register_database_plugin(Arc::new(SQLitePlugin::default()))
         .await
         .expect("Err creating client");
 
