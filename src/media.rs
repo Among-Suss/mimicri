@@ -1,6 +1,5 @@
 use serenity::async_trait;
-use serenity::http::{Http, request};
-use serenity::prelude::Mutex;
+use serenity::http::{Http};
 use serenity::model::prelude::{GuildId, Message};
 use songbird::tracks::TrackHandle;
 use songbird::{Call, EventHandler, EventContext, Event};
@@ -25,7 +24,7 @@ pub struct MediaItem {
     pub metadata: HashMap<String, String>,
 
     pub request_msg_channel: serenity::model::prelude::ChannelId,
-    pub http: Arc<Http>,
+    pub request_msg_http: Arc<Http>,
 }
 
 pub struct MediaQueue {
@@ -35,12 +34,12 @@ pub struct MediaQueue {
 
 pub struct ChannelMediaPlayer {
     pub guild_id: GuildId,
-    pub shared_media_queue: Arc<(Mutex<MediaQueue>, async_std::sync::Condvar)>,
+    pub lock_protected_media_queue: (async_std::sync::Mutex<MediaQueue>, async_std::sync::Condvar),
 }
 
 #[async_trait]
 impl EventHandler for MediaEventHandler {
-    async fn act(&self, ctx: &EventContext<'_>) -> Option<Event> {
+    async fn act(&self, _ctx: &EventContext<'_>) -> Option<Event> {
         let (mutex, condvar) = &*self.signaler;
 
         let mut guard = mutex.lock().await;
@@ -51,12 +50,54 @@ impl EventHandler for MediaEventHandler {
     }
 }
 
-pub async fn run_media_player(
-    voice_channel_handler: Arc<Mutex<Call>>, 
-    shared_media_queue: Arc<(async_std::sync::Mutex<MediaQueue>, async_std::sync::Condvar)>
+pub async fn media_player_skip(
+    shared_channel_media_player: Arc<ChannelMediaPlayer>
+){
+    let (shared_media_queue_lock, _) = &shared_channel_media_player.lock_protected_media_queue;
+    let smq_locked = shared_media_queue_lock.lock().await;
+    match &smq_locked.now_playing {
+        Some((_, track_handle)) => {
+            let result = track_handle.stop();
+            match result {
+                Ok(_) => (),
+                Err(x) => {
+                    println!("Error skipping track: {:?}", x);
+                },
+            }
+        },
+        None => (),
+    };
+}
+
+pub async fn media_player_insert(
+    url: String, 
+    request_msg_channel: serenity::model::prelude::ChannelId,
+    request_msg_http: Arc<Http>,
+    shared_channel_media_player: Arc<ChannelMediaPlayer>
+){
+    let (shared_media_queue_lock, shared_media_queue_condvar) = &shared_channel_media_player.lock_protected_media_queue;
+
+    let mut smq_locked = shared_media_queue_lock.lock().await;
+
+    smq_locked.queue.push_front(MediaItem {
+        url: url,
+        title: String::new(),
+        duration: 0,
+        description: String::new(),
+        metadata: HashMap::new(),
+        request_msg_channel,
+        request_msg_http,
+    });
+
+    shared_media_queue_condvar.notify_one();
+}
+
+pub async fn media_player_run(
+    voice_channel_handler: Arc<serenity::prelude::Mutex<Call>>, 
+    shared_channel_media_player: Arc<ChannelMediaPlayer>
 ){
 
-    let (shared_media_queue_lock, shared_media_queue_condvar) = &*shared_media_queue;
+    let (shared_media_queue_lock, shared_media_queue_condvar) = &shared_channel_media_player.lock_protected_media_queue;
 
     'medialoop: loop {
 
@@ -74,7 +115,7 @@ pub async fn run_media_player(
             // set current song
             let next_song = shared_media_queue.queue.pop_back().unwrap();
             let request_msg_channel = next_song.request_msg_channel;
-            let request_msg_http = next_song.http.clone();
+            let request_msg_http = next_song.request_msg_http.clone();
             let source = match songbird::ytdl(&next_song.url).await {
                 Ok(source) => source,
                 Err(why) => {
