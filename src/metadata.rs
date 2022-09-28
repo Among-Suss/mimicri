@@ -14,6 +14,35 @@ struct YoutubeDLJson {
     duration: Option<f32>,
 }
 
+enum Search {
+
+}
+
+pub fn search_youtube(query: String) -> Result<String, &'static str> {
+     match process::Command::new("youtube-dl")
+        .arg("-j")
+        .arg(format!("ytsearch:{}", query))
+        .output()
+    {
+        Err(_) => return Err("Failed to run youtube-dl"),
+        Ok(output) => {
+            let output_str = String::from_utf8_lossy(&output.stdout);
+            let err_str = String::from_utf8_lossy(&output.stderr);
+
+            if !err_str.is_empty() {
+                println!("[playlist] [youtube-dl] {}", err_str);
+            }
+
+            let json: YoutubeDLJson = serde_json::from_str(&output_str).unwrap();
+
+            match json.id {
+                None => Err("FUck"),
+                Some(id) => Ok(id),
+            }
+        }
+    }
+}
+
 pub fn get_playlist_sources(url: String) -> Result<Vec<String>, &'static str> {
     match process::Command::new("youtube-dl")
         .arg("--flat-playlist")
