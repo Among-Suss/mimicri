@@ -1,5 +1,6 @@
 # mimicri
-A Discord music bot that spies on you (very sus).
+THIS PROJECT IS UNDER HEAVY DEVELOPMENT
+An imposter Discord music bot.
 
 # Features
 - [ ] Search
