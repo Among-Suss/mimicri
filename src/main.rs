@@ -6,13 +6,18 @@
 //! git = "https://github.com/serenity-rs/serenity.git"
 //! features = ["client", "standard_framework", "voice"]
 //! ```
+mod database;
 mod media;
 mod metadata;
 mod play;
 
 use dotenv::dotenv;
 use media::ChannelMediaPlayer;
-use std::{env, collections::{HashMap, LinkedList}, sync::Arc};
+use std::{
+    collections::{HashMap, LinkedList},
+    env,
+    sync::Arc,
+};
 
 // This trait adds the `register_songbird` and `register_songbird_with` methods
 // to the client builder below, making it easy to install this voice client.
@@ -34,7 +39,10 @@ use serenity::{
     Result as SerenityResult,
 };
 
-use crate::play::{queue_search, queue_url};
+use crate::{
+    database::{database::DatabasePluginInit, sqlite_plugin::SQLLitePlugin},
+    play::{queue_search, queue_url},
+};
 
 struct Handler;
 
@@ -49,10 +57,11 @@ impl EventHandler for Handler {
 #[commands(deafen, join, leave, mute, play, ping, skip, undeafen, unmute)]
 struct General;
 
-type GuildMediaPlayerMap = async_std::sync::Mutex<Option<HashMap<serenity::model::prelude::GuildId, Arc<ChannelMediaPlayer>>>>;
+type GuildMediaPlayerMap = async_std::sync::Mutex<
+    Option<HashMap<serenity::model::prelude::GuildId, Arc<ChannelMediaPlayer>>>,
+>;
 
 static GUILD_MEDIA_PLAYER_MAP: GuildMediaPlayerMap = async_std::sync::Mutex::new(None);
-
 
 #[tokio::main]
 async fn main() {
@@ -60,9 +69,7 @@ async fn main() {
         let mut guild_map = GUILD_MEDIA_PLAYER_MAP.lock().await;
         match &*guild_map {
             Some(_) => panic!("HashMap should be uninitialized!"),
-            None => *guild_map = Some(
-                HashMap::new()
-            ),
+            None => *guild_map = Some(HashMap::new()),
         };
     }
 
@@ -85,6 +92,7 @@ async fn main() {
         .event_handler(Handler)
         .framework(framework)
         .register_songbird()
+        .register_database_plugin(Arc::new(SQLLitePlugin { path: "mimicri.db" }))
         .await
         .expect("Err creating client");
 
@@ -162,7 +170,15 @@ async fn play(ctx: &Context, msg: &Message, args: Args) -> CommandResult {
         .clone();
 
     if url.starts_with("http") {
-        match queue_url(guild_id, url, msg.channel_id, ctx.http.clone(), &GUILD_MEDIA_PLAYER_MAP).await {
+        match queue_url(
+            guild_id,
+            url,
+            msg.channel_id,
+            ctx.http.clone(),
+            &GUILD_MEDIA_PLAYER_MAP,
+        )
+        .await
+        {
             Ok(_) => (),
             Err(err) => {
                 check_msg(msg.channel_id.say(&ctx.http, err).await);
@@ -228,9 +244,11 @@ async fn join(ctx: &Context, msg: &Message) -> CommandResult {
     let mut guild_map_guard = GUILD_MEDIA_PLAYER_MAP.lock().await;
     let guild_map = guild_map_guard.as_mut().unwrap();
     if guild_map.contains_key(&guild_id) {
-        check_msg(msg.reply(ctx, "Already connected to a voice channel in this server!").await);
+        check_msg(
+            msg.reply(ctx, "Already connected to a voice channel in this server!")
+                .await,
+        );
     } else {
-
         let channel_id = guild
             .voice_states
             .get(&msg.author.id)
@@ -255,7 +273,10 @@ async fn join(ctx: &Context, msg: &Message) -> CommandResult {
         let media_player = Arc::new(ChannelMediaPlayer {
             guild_id,
             lock_protected_media_queue: (
-                async_std::sync::Mutex::new(media::MediaQueue { now_playing: None, queue: LinkedList::new() }),
+                async_std::sync::Mutex::new(media::MediaQueue {
+                    now_playing: None,
+                    queue: LinkedList::new(),
+                }),
                 async_std::sync::Condvar::new(),
             ),
         });
@@ -263,8 +284,6 @@ async fn join(ctx: &Context, msg: &Message) -> CommandResult {
         let _ = guild_map.insert(guild_id, media_player.clone());
         tokio::spawn(media::media_player_run(handler.0, media_player));
     }
-
-    
 
     Ok(())
 }
