@@ -1,7 +1,7 @@
 use regex::Regex;
 use serde::{Deserialize, Serialize};
-use std::process;
-use crate::media::MediaItem;
+use std::{process, collections::HashMap};
+use crate::media::{MediaItem, MediaInfo};
 
 #[derive(Serialize, Deserialize)]
 struct YoutubeDLJson {
@@ -11,14 +11,22 @@ struct YoutubeDLJson {
     url: Option<String>,
     title: Option<String>,
     description: Option<String>,
-    duration: Option<f32>,
+    duration: Option<i64>,
 }
 
-enum Search {
-
+impl From<YoutubeDLJson> for MediaInfo {
+    fn from(json: YoutubeDLJson) -> Self {
+        MediaInfo {
+            url: json.url.unwrap_or("".to_string()),
+            title: json.title.unwrap_or("".to_string()),
+            description: json.description.unwrap_or("".to_string()),
+            duration: json.duration.unwrap_or_default(),
+            metadata: HashMap::new()
+        }
+    }
 }
 
-pub fn search_youtube(query: String) -> Result<String, &'static str> {
+pub fn get_search(query: String) -> Result<MediaInfo, &'static str> {
      match process::Command::new("youtube-dl")
         .arg("-j")
         .arg(format!("ytsearch:{}", query))
@@ -33,17 +41,17 @@ pub fn search_youtube(query: String) -> Result<String, &'static str> {
                 println!("[playlist] [youtube-dl] {}", err_str);
             }
 
-            let json: YoutubeDLJson = serde_json::from_str(&output_str).unwrap();
+            let json_result: serde_json::Result<YoutubeDLJson> = serde_json::from_str(&output_str);
 
-            match json.id {
-                None => Err("FUck"),
-                Some(id) => Ok(id),
+            match json_result {
+                Err(_) => Err("FUck"),
+                Ok(json) => Ok(MediaInfo::from(json)),
             }
         }
     }
 }
 
-pub fn get_playlist_sources(url: String) -> Result<Vec<String>, &'static str> {
+pub fn get_playlist_sources(url: String) -> Result<Vec<MediaInfo>, &'static str> {
     match process::Command::new("youtube-dl")
         .arg("--flat-playlist")
         .arg("-j")
@@ -52,7 +60,7 @@ pub fn get_playlist_sources(url: String) -> Result<Vec<String>, &'static str> {
     {
         Err(_) => return Err("Failed to run youtube-dl"),
         Ok(output) => {
-            let mut sources: Vec<String> = Vec::new();
+            let mut sources: Vec<MediaInfo> = Vec::new();
 
             let output_str = String::from_utf8_lossy(&output.stdout);
             let err_str = String::from_utf8_lossy(&output.stderr);
@@ -68,10 +76,10 @@ pub fn get_playlist_sources(url: String) -> Result<Vec<String>, &'static str> {
                     continue;
                 }
 
-                let json: YoutubeDLJson = serde_json::from_str(line).unwrap();
+                let json_result: serde_json::Result<YoutubeDLJson> = serde_json::from_str(line);
 
-                if let Some(id) = json.id {
-                    sources.push(id);
+                if let Ok(json) = json_result {
+                    sources.push(MediaInfo::from(json));
                 }
             }
 
@@ -116,6 +124,17 @@ pub fn get_videos_metadata(urls: Vec<String>) -> Vec<MediaItem> {
 
 #[cfg(test)]
 mod tests {
+    mod search {
+        use crate::metadata::get_search;
+
+        #[test]
+        fn success() {
+            let video = get_search("hello".to_string()).unwrap();
+
+            assert!(video.url.is_empty());
+        }
+    }
+
     mod playlist {
         use super::super::get_playlist_sources;
 
@@ -127,7 +146,7 @@ mod tests {
             .unwrap();
 
             for source in sources.iter() {
-                assert!(!source.is_empty())
+                assert!(!source.url.is_empty())
             }
         }
 
@@ -139,7 +158,7 @@ mod tests {
             .unwrap();
 
             for source in sources.iter() {
-                assert!(!source.is_empty())
+                assert!(!source.url.is_empty())
             }
         }
 
@@ -209,6 +228,3 @@ mod tests {
         }
     }
 }
-
-//https://www.youtube.com/watch?v=u_-08wAGsac
-//https://www.youtube.com/watch?v=kr4Lu8dkRPg
