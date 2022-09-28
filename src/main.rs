@@ -164,11 +164,6 @@ async fn play(ctx: &Context, msg: &Message, args: Args) -> CommandResult {
         return Ok(());
     }
 
-    let manager = songbird::get(ctx)
-        .await
-        .expect("Songbird Voice client placed in at initialisation.")
-        .clone();
-
     if url.starts_with("http") {
         match queue_url(
             guild_id,
@@ -185,7 +180,15 @@ async fn play(ctx: &Context, msg: &Message, args: Args) -> CommandResult {
             }
         }
     } else {
-        match queue_search(manager, guild_id, url, &GUILD_MEDIA_PLAYER_MAP).await {
+        match queue_search(
+            guild_id,
+            url,
+            msg.channel_id,
+            ctx.http.clone(),
+            &GUILD_MEDIA_PLAYER_MAP,
+        )
+        .await
+        {
             Ok(_) => (),
             Err(err) => {
                 check_msg(msg.channel_id.say(&ctx.http, err).await);

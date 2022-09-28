@@ -1,6 +1,6 @@
 use regex::Regex;
 use serde::{Deserialize, Serialize};
-use std::{process, collections::HashMap};
+use std::{process, collections::{HashMap, LinkedList}};
 use crate::media::{MediaItem, MediaInfo};
 
 #[derive(Serialize, Deserialize)]
@@ -17,7 +17,7 @@ struct YoutubeDLJson {
 impl From<YoutubeDLJson> for MediaInfo {
     fn from(json: YoutubeDLJson) -> Self {
         MediaInfo {
-            url: json.url.unwrap_or("".to_string()),
+            url: format!("https://www.youtube.com/watch?v={}", json.id.unwrap_or("".to_string())), // TODO make this work with soundcloud too
             title: json.title.unwrap_or("".to_string()),
             description: json.description.unwrap_or("".to_string()),
             duration: json.duration.unwrap_or_default(),
@@ -26,10 +26,10 @@ impl From<YoutubeDLJson> for MediaInfo {
     }
 }
 
-pub fn get_search(query: String) -> Result<MediaInfo, &'static str> {
-     match process::Command::new("youtube-dl")
+pub fn get_info(url: String) -> Result<MediaInfo, &'static str> {
+    match process::Command::new("youtube-dl")
         .arg("-j")
-        .arg(format!("ytsearch:{}", query))
+        .arg(url)
         .output()
     {
         Err(_) => return Err("Failed to run youtube-dl"),
@@ -51,7 +51,11 @@ pub fn get_search(query: String) -> Result<MediaInfo, &'static str> {
     }
 }
 
-pub fn get_playlist_sources(url: String) -> Result<Vec<MediaInfo>, &'static str> {
+pub fn get_search(query: String) -> Result<MediaInfo, &'static str> {
+   get_info(format!("ytsearch:{}", query))
+}
+
+pub fn get_playlist_sources(url: String) -> Result<LinkedList<MediaInfo>, &'static str> {
     match process::Command::new("youtube-dl")
         .arg("--flat-playlist")
         .arg("-j")
@@ -60,7 +64,7 @@ pub fn get_playlist_sources(url: String) -> Result<Vec<MediaInfo>, &'static str>
     {
         Err(_) => return Err("Failed to run youtube-dl"),
         Ok(output) => {
-            let mut sources: Vec<MediaInfo> = Vec::new();
+            let mut sources: LinkedList<MediaInfo> = LinkedList::new();
 
             let output_str = String::from_utf8_lossy(&output.stdout);
             let err_str = String::from_utf8_lossy(&output.stderr);
@@ -79,7 +83,7 @@ pub fn get_playlist_sources(url: String) -> Result<Vec<MediaInfo>, &'static str>
                 let json_result: serde_json::Result<YoutubeDLJson> = serde_json::from_str(line);
 
                 if let Ok(json) = json_result {
-                    sources.push(MediaInfo::from(json));
+                    sources.push_back(MediaInfo::from(json));
                 }
             }
 
@@ -131,7 +135,7 @@ mod tests {
         fn success() {
             let video = get_search("hello".to_string()).unwrap();
 
-            assert!(video.url.is_empty());
+            assert!(!video.url.is_empty());
         }
     }
 
