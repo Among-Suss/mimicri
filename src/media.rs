@@ -17,6 +17,14 @@ impl MediaEventHandler {
     }
 }
 
+pub struct MediaInfo {
+    pub url: String,
+    pub title: String,
+    pub duration: i64,
+    pub description: String,
+    pub metadata: HashMap<String, String>,
+}
+
 pub struct MediaItem {
     pub url: String,
     pub title: String,
@@ -24,8 +32,8 @@ pub struct MediaItem {
     pub description: String,
     pub metadata: HashMap<String, String>,
 
-    pub request_msg_channel: Option<serenity::model::prelude::ChannelId>,
-    pub request_msg_http: Option<Arc<Http>>,
+    pub request_msg_channel: serenity::model::prelude::ChannelId,
+    pub request_msg_http: Arc<Http>,
 }
 
 pub struct MediaQueue {
@@ -36,6 +44,24 @@ pub struct MediaQueue {
 pub struct ChannelMediaPlayer {
     pub guild_id: GuildId,
     pub lock_protected_media_queue: (async_std::sync::Mutex<MediaQueue>, async_std::sync::Condvar),
+}
+
+impl MediaInfo {
+    pub fn as_media_item(
+        self,
+        request_msg_channel: serenity::model::prelude::ChannelId,
+        request_msg_http: Arc<Http>,
+    ) -> MediaItem{
+        MediaItem { 
+            url: self.url, 
+            title: self.title, 
+            duration: self.duration, 
+            description: self.description, 
+            metadata: self.metadata, 
+            request_msg_channel: request_msg_channel, 
+            request_msg_http: request_msg_http 
+        }
+    }
 }
 
 #[async_trait]
@@ -71,14 +97,16 @@ pub async fn media_player_skip(
 }
 
 pub async fn media_player_enqueue(
-    media_item: MediaItem,
+    media_info: MediaInfo,
+    request_msg_channel: serenity::model::prelude::ChannelId,
+    request_msg_http: Arc<Http>,
     shared_channel_media_player: &Arc<ChannelMediaPlayer>,
 ){
     let (shared_media_queue_lock, shared_media_queue_condvar) = &shared_channel_media_player.lock_protected_media_queue;
 
     let mut smq_locked = shared_media_queue_lock.lock().await;
 
-    smq_locked.queue.push_front(media_item);
+    smq_locked.queue.push_front(media_info.as_media_item(request_msg_channel, request_msg_http));
 
     shared_media_queue_condvar.notify_one();
 }
@@ -112,9 +140,11 @@ pub async fn media_player_run(
                 Err(why) => {
                     println!("Error creating source: {:?}", why);
                     
-                    if let (Some(request_msg_http), Some(request_msg_channel)) = (request_msg_http, request_msg_channel) {
-                        check_msg(request_msg_channel.say(&request_msg_http, "Error playing track: youtube-dl or ffmpeg failed").await);
-                    }
+                    check_msg(
+                        request_msg_channel.say(
+                            &request_msg_http, "Error playing track: youtube-dl or ffmpeg failed"
+                        ).await
+                    );
     
                     continue 'medialoop;
                 }
@@ -131,10 +161,12 @@ pub async fn media_player_run(
                 Err(err) => {
                     println!("Error on track_handle.add_event {:?}", err);
 
-                    if let (Some(request_msg_http), Some(request_msg_channel)) = (request_msg_http, request_msg_channel) {
-                        check_msg(request_msg_channel.say(&request_msg_http, "Error playing track: Unable to initialize TrackEvent handler.").await);
-                    }
-                    
+                    check_msg(
+                        request_msg_channel.say(
+                            &request_msg_http, "Error playing track: Unable to initialize TrackEvent handler."
+                        ).await
+                    );
+
                     continue 'medialoop;
                 },
             }

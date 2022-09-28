@@ -50,15 +50,15 @@ pub async fn queue_url(
 
     if let Some(media_player) = guild_map.get(&guild_id) {
         media::media_player_enqueue(
-            media::MediaItem {
+            media::MediaInfo {
                 url: url,
                 title: String::new(),
                 duration: 0,
                 description: String::new(),
                 metadata: HashMap::new(),
-                request_msg_channel: Some(request_msg_channel),
-                request_msg_http: Some(request_msg_http),
-            }, 
+            },
+            request_msg_channel, 
+            request_msg_http,
             &media_player
         ).await;
     } else {
