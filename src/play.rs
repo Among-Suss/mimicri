@@ -38,27 +38,20 @@ pub async fn queue_search(
 }
 
 pub async fn queue_url(
-    manager: Arc<Songbird>,
     guild_id: GuildId,
     url: String,
     request_msg_channel: ChannelId,
     request_msg_http: Arc<Http>,
     guild_media_player_map: &GuildMediaPlayerMap,
 ) -> Result<(), &'static str> {
-    if let Some(handler_lock) = manager.get(guild_id) {
-        let mut handler = handler_lock.lock().await;
 
-        let mut guild_map_guard = guild_media_player_map.lock().await;
-        let guild_map = guild_map_guard.as_mut().unwrap();
+    let mut guild_map_guard = guild_media_player_map.lock().await;
+    let guild_map = guild_map_guard.as_mut().unwrap();
 
-        if let Some(media_player) = guild_map.get(&guild_id) {
-            media::media_player_enqueue(url, request_msg_channel, request_msg_http, media_player.clone()).await;
-        } else {
-            return Err("Not connected to a voice channel!");
-        }
-
+    if let Some(media_player) = guild_map.get(&guild_id) {
+        media::media_player_enqueue(url, request_msg_channel, request_msg_http, media_player.clone()).await;
     } else {
-        return Err("Not in a channel");
+        return Err("Not connected to a voice channel!");
     }
 
     Ok(())

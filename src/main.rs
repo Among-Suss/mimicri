@@ -162,7 +162,7 @@ async fn play(ctx: &Context, msg: &Message, args: Args) -> CommandResult {
         .clone();
 
     if url.starts_with("http") {
-        match queue_url(manager, guild_id, url, msg.channel_id, ctx.http.clone(), &GUILD_MEDIA_PLAYER_MAP).await {
+        match queue_url(guild_id, url, msg.channel_id, ctx.http.clone(), &GUILD_MEDIA_PLAYER_MAP).await {
             Ok(_) => (),
             Err(err) => {
                 check_msg(msg.channel_id.say(&ctx.http, err).await);
