@@ -274,6 +274,7 @@ async fn join(ctx: &Context, msg: &Message) -> CommandResult {
             guild_id,
             lock_protected_media_queue: (
                 async_std::sync::Mutex::new(media::MediaQueue {
+                    running_state: true,
                     now_playing: None,
                     queue: LinkedList::new(),
                 }),
@@ -281,7 +282,7 @@ async fn join(ctx: &Context, msg: &Message) -> CommandResult {
             ),
         });
 
-        let _ = guild_map.insert(guild_id, media_player.clone());
+        guild_map.insert(guild_id, media_player.clone());
         tokio::spawn(media::media_player_run(handler.0, media_player));
     }
 
@@ -301,6 +302,17 @@ async fn leave(ctx: &Context, msg: &Message) -> CommandResult {
     let has_handler = manager.get(guild_id).is_some();
 
     if has_handler {
+        {
+            let mut guild_map_guard = GUILD_MEDIA_PLAYER_MAP.lock().await;
+            let guild_map = guild_map_guard.as_mut().unwrap();
+
+            if let Some(media_player) = guild_map.remove(&guild_id) {
+                media::media_player_quit(&media_player).await;
+            } else {
+                check_msg(msg.reply(ctx, "Not connected to a voice channel!").await);
+            }
+        }
+
         if let Err(e) = manager.remove(guild_id).await {
             check_msg(
                 msg.channel_id

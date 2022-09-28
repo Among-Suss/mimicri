@@ -37,8 +37,9 @@ pub struct MediaItem {
 }
 
 pub struct MediaQueue {
+    pub running_state: bool,
     pub now_playing: Option<(MediaItem, TrackHandle)>,
-    pub queue: LinkedList<MediaItem>,
+    pub queue: LinkedList<Option<MediaItem>>,
 }
 
 pub struct ChannelMediaPlayer {
@@ -106,9 +107,34 @@ pub async fn media_player_enqueue(
 
     let mut smq_locked = shared_media_queue_lock.lock().await;
 
-    smq_locked.queue.push_front(media_info.as_media_item(request_msg_channel, request_msg_http));
+    smq_locked.queue.push_front(Some(media_info.as_media_item(request_msg_channel, request_msg_http)));
 
     shared_media_queue_condvar.notify_one();
+}
+
+pub async fn media_player_quit(shared_channel_media_player: &Arc<ChannelMediaPlayer>){
+    let (shared_media_queue_lock, shared_media_queue_condvar) = &shared_channel_media_player.lock_protected_media_queue;
+    
+    {
+        let mut shared_media_queue = shared_media_queue_lock.lock().await;
+
+        shared_media_queue.running_state = false;
+        shared_media_queue.queue.push_front(None);
+
+        match &shared_media_queue.now_playing {
+            Some((_, track_handle)) => {
+                let res = track_handle.stop();
+                match res {
+                    Ok(_) => (),
+                    Err(e) => {
+                        println!("unable to skip track to quit media player, {:?}", e);
+                    },
+                }
+            },
+            None => (),
+        }
+    }
+
 }
 
 pub async fn media_player_run(
@@ -122,17 +148,22 @@ pub async fn media_player_run(
 
         let end_signaler = Arc::new((async_std::sync::Mutex::new(false), async_std::sync::Condvar::new()));
 
-        {
+        let running_state = {
 
             // lock and wait for song queue to not be empty
             let mut shared_media_queue = shared_media_queue_lock.lock().await;
             while shared_media_queue.queue.is_empty() {
                 shared_media_queue = shared_media_queue_condvar.wait(shared_media_queue).await;
             }
+            let next_song = shared_media_queue.queue.pop_back().unwrap();
+
+            if !shared_media_queue.running_state || next_song.is_none() {
+                break 'medialoop;
+            }
 
             // get song from queue and create source, track, trackhandle
             // set current song
-            let next_song = shared_media_queue.queue.pop_back().unwrap();
+            let next_song = next_song.unwrap();
             let request_msg_channel = next_song.request_msg_channel;
             let request_msg_http = next_song.request_msg_http.clone();
             let source = match Restartable::ytdl(next_song.url.clone(), false).await {
@@ -175,13 +206,24 @@ pub async fn media_player_run(
             let mut vc_handler = voice_channel_handler.lock().await;
             vc_handler.play(track);
 
-        }
+            shared_media_queue.running_state
+        };
         
         // wait for song to finish
-        let (end_mutex, end_condvar) = &*end_signaler;
-        let mut end_guard = end_mutex.lock().await;
-        while !*end_guard {
-            end_guard = end_condvar.wait(end_guard).await;
+        if running_state {
+            let (end_mutex, end_condvar) = &*end_signaler;
+            let mut end_guard = end_mutex.lock().await;
+            while !*end_guard {
+                end_guard = end_condvar.wait(end_guard).await;
+            }
+        }
+
+        {
+            let mut shared_media_queue = shared_media_queue_lock.lock().await;
+            shared_media_queue.now_playing = None;
+            if !shared_media_queue.running_state {
+                break 'medialoop;
+            }
         }
 
     }
