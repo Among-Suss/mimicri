@@ -1,6 +1,7 @@
 use regex::Regex;
 use serde::{Deserialize, Serialize};
 use std::process;
+use crate::media::MediaItem;
 
 #[derive(Serialize, Deserialize)]
 struct YoutubeDLJson {
@@ -69,8 +70,6 @@ pub fn get_timestamps(description: String) -> Vec<Timestamp> {
                 accum * 60 + x.parse::<i32>().unwrap_or_default()
             });
 
-            println!("{} -> {}", description, seconds);
-
             timestamps.push(Timestamp {
                 seconds,
                 label: line[reg_match.end()..line.len()].trim().to_string(),
@@ -80,6 +79,10 @@ pub fn get_timestamps(description: String) -> Vec<Timestamp> {
     }
 
     timestamps
+}
+
+pub fn get_videos_metadata(urls: Vec<String>) -> Vec<MediaItem> {
+    vec![]
 }
 
 #[cfg(test)]
@@ -177,3 +180,6 @@ mod tests {
         }
     }
 }
+
+//https://www.youtube.com/watch?v=u_-08wAGsac
+//https://www.youtube.com/watch?v=kr4Lu8dkRPg
