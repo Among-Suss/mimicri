@@ -1,4 +1,4 @@
-use std::sync::Arc;
+use std::{sync::Arc, collections::HashMap};
 
 use serenity::{model::prelude::{GuildId, ChannelId}, http::Http};
 
@@ -49,7 +49,18 @@ pub async fn queue_url(
     let guild_map = guild_map_guard.as_mut().unwrap();
 
     if let Some(media_player) = guild_map.get(&guild_id) {
-        media::media_player_enqueue(url, request_msg_channel, request_msg_http, &media_player).await;
+        media::media_player_enqueue(
+            media::MediaItem {
+                url: url,
+                title: String::new(),
+                duration: 0,
+                description: String::new(),
+                metadata: HashMap::new(),
+                request_msg_channel: Some(request_msg_channel),
+                request_msg_http: Some(request_msg_http),
+            }, 
+            &media_player
+        ).await;
     } else {
         return Err("Not connected to a voice channel!");
     }

@@ -24,8 +24,8 @@ pub struct MediaItem {
     pub description: String,
     pub metadata: HashMap<String, String>,
 
-    pub request_msg_channel: serenity::model::prelude::ChannelId,
-    pub request_msg_http: Arc<Http>,
+    pub request_msg_channel: Option<serenity::model::prelude::ChannelId>,
+    pub request_msg_http: Option<Arc<Http>>,
 }
 
 pub struct MediaQueue {
@@ -71,24 +71,14 @@ pub async fn media_player_skip(
 }
 
 pub async fn media_player_enqueue(
-    url: String, 
-    request_msg_channel: serenity::model::prelude::ChannelId,
-    request_msg_http: Arc<Http>,
-    shared_channel_media_player: &Arc<ChannelMediaPlayer>
+    media_item: MediaItem,
+    shared_channel_media_player: &Arc<ChannelMediaPlayer>,
 ){
     let (shared_media_queue_lock, shared_media_queue_condvar) = &shared_channel_media_player.lock_protected_media_queue;
 
     let mut smq_locked = shared_media_queue_lock.lock().await;
 
-    smq_locked.queue.push_front(MediaItem {
-        url: url,
-        title: String::new(),
-        duration: 0,
-        description: String::new(),
-        metadata: HashMap::new(),
-        request_msg_channel,
-        request_msg_http,
-    });
+    smq_locked.queue.push_front(media_item);
 
     shared_media_queue_condvar.notify_one();
 }
@@ -121,8 +111,10 @@ pub async fn media_player_run(
                 Ok(source) => source,
                 Err(why) => {
                     println!("Error creating source: {:?}", why);
-
-                    check_msg(request_msg_channel.say(&request_msg_http, "Error playing track: youtube-dl or ffmpeg failed").await);
+                    
+                    if let (Some(request_msg_http), Some(request_msg_channel)) = (request_msg_http, request_msg_channel) {
+                        check_msg(request_msg_channel.say(&request_msg_http, "Error playing track: youtube-dl or ffmpeg failed").await);
+                    }
     
                     continue 'medialoop;
                 }
@@ -139,8 +131,10 @@ pub async fn media_player_run(
                 Err(err) => {
                     println!("Error on track_handle.add_event {:?}", err);
 
-                    check_msg(request_msg_channel.say(&request_msg_http, "Error playing track: Unable to initialize TrackEvent handler.").await);
-
+                    if let (Some(request_msg_http), Some(request_msg_channel)) = (request_msg_http, request_msg_channel) {
+                        check_msg(request_msg_channel.say(&request_msg_http, "Error playing track: Unable to initialize TrackEvent handler.").await);
+                    }
+                    
                     continue 'medialoop;
                 },
             }
