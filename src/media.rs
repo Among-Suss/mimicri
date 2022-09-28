@@ -1,6 +1,7 @@
 use serenity::async_trait;
 use serenity::http::{Http};
 use serenity::model::prelude::{GuildId, Message};
+use songbird::input::{Restartable, Input};
 use songbird::tracks::TrackHandle;
 use songbird::{Call, EventHandler, EventContext, Event};
 use std::collections::{LinkedList, HashMap};
@@ -69,7 +70,7 @@ pub async fn media_player_skip(
     };
 }
 
-pub async fn media_player_insert(
+pub async fn media_player_enqueue(
     url: String, 
     request_msg_channel: serenity::model::prelude::ChannelId,
     request_msg_http: Arc<Http>,
@@ -116,7 +117,7 @@ pub async fn media_player_run(
             let next_song = shared_media_queue.queue.pop_back().unwrap();
             let request_msg_channel = next_song.request_msg_channel;
             let request_msg_http = next_song.request_msg_http.clone();
-            let source = match songbird::ytdl(&next_song.url).await {
+            let source = match Restartable::ytdl(next_song.url.clone(), false).await {
                 Ok(source) => source,
                 Err(why) => {
                     println!("Error creating source: {:?}", why);
@@ -126,7 +127,7 @@ pub async fn media_player_run(
                     continue 'medialoop;
                 }
             };
-            let (track, track_handle) = songbird::create_player(source);
+            let (track, track_handle) = songbird::create_player(Input::from(source));
             shared_media_queue.now_playing = Some((next_song, track_handle.clone()));
             
             // create a condvar to signal the end of the song

@@ -11,7 +11,8 @@ mod metadata;
 mod play;
 
 use dotenv::dotenv;
-use std::env;
+use media::ChannelMediaPlayer;
+use std::{env, collections::{HashMap, LinkedList}, sync::Arc};
 
 // This trait adds the `register_songbird` and `register_songbird_with` methods
 // to the client builder below, making it easy to install this voice client.
@@ -45,11 +46,24 @@ impl EventHandler for Handler {
 }
 
 #[group]
-#[commands(deafen, join, leave, mute, play, ping, undeafen, unmute)]
+#[commands(deafen, join, leave, mute, play, ping, skip, undeafen, unmute)]
 struct General;
+
+type GuildMediaPlayerMap = async_std::sync::Mutex<Option<HashMap<serenity::model::prelude::GuildId, Arc<ChannelMediaPlayer>>>>;
+
+static GUILD_MEDIA_PLAYER_MAP: GuildMediaPlayerMap = async_std::sync::Mutex::new(None);
+
 
 #[tokio::main]
 async fn main() {
+    let mut guild_map = GUILD_MEDIA_PLAYER_MAP.lock().await;
+    match &*guild_map {
+        Some(_) => panic!("HashMap should be uninitialized!"),
+        None => *guild_map = Some(
+            HashMap::new()
+        ),
+    };
+
     tracing_subscriber::fmt::init();
 
     // Configure the client with your Discord bot token in the environment.
@@ -146,14 +160,14 @@ async fn play(ctx: &Context, msg: &Message, args: Args) -> CommandResult {
         .clone();
 
     if url.starts_with("http") {
-        match queue_url(manager, guild_id, url).await {
+        match queue_url(manager, guild_id, url, msg.channel_id, ctx.http.clone(), &GUILD_MEDIA_PLAYER_MAP).await {
             Ok(_) => (),
             Err(err) => {
                 check_msg(msg.channel_id.say(&ctx.http, err).await);
             }
         }
     } else {
-        match queue_search(manager, guild_id, url).await {
+        match queue_search(manager, guild_id, url, &GUILD_MEDIA_PLAYER_MAP).await {
             Ok(_) => (),
             Err(err) => {
                 check_msg(msg.channel_id.say(&ctx.http, err).await);
@@ -209,26 +223,46 @@ async fn join(ctx: &Context, msg: &Message) -> CommandResult {
     let guild = msg.guild(&ctx.cache).unwrap();
     let guild_id = guild.id;
 
-    let channel_id = guild
-        .voice_states
-        .get(&msg.author.id)
-        .and_then(|voice_state| voice_state.channel_id);
+    let mut guild_map_guard = GUILD_MEDIA_PLAYER_MAP.lock().await;
+    let guild_map = guild_map_guard.as_mut().unwrap();
+    if guild_map.contains_key(&guild_id) {
+        check_msg(msg.reply(ctx, "Already connected to a voice channel in this server!").await);
+    } else {
 
-    let connect_to = match channel_id {
-        Some(channel) => channel,
-        None => {
-            check_msg(msg.reply(ctx, "Not in a voice channel").await);
+        let channel_id = guild
+            .voice_states
+            .get(&msg.author.id)
+            .and_then(|voice_state| voice_state.channel_id);
 
-            return Ok(());
-        }
-    };
+        let connect_to = match channel_id {
+            Some(channel) => channel,
+            None => {
+                check_msg(msg.reply(ctx, "Not in a voice channel").await);
 
-    let manager = songbird::get(ctx)
-        .await
-        .expect("Songbird Voice client placed in at initialisation.")
-        .clone();
+                return Ok(());
+            }
+        };
 
-    let _handler = manager.join(guild_id, connect_to).await;
+        let manager = songbird::get(ctx)
+            .await
+            .expect("Songbird Voice client placed in at initialisation.")
+            .clone();
+
+        let handler = manager.join(guild_id, connect_to).await;
+
+        let media_player = Arc::new(ChannelMediaPlayer {
+            guild_id,
+            lock_protected_media_queue: (
+                async_std::sync::Mutex::new(media::MediaQueue { now_playing: None, queue: LinkedList::new() }),
+                async_std::sync::Condvar::new(),
+            ),
+        });
+
+        let _ = guild_map.insert(guild_id, media_player.clone());
+        tokio::spawn(media::media_player_run(handler.0, media_player));
+    }
+
+    
 
     Ok(())
 }
@@ -304,6 +338,23 @@ async fn mute(ctx: &Context, msg: &Message) -> CommandResult {
 #[command]
 async fn ping(context: &Context, msg: &Message) -> CommandResult {
     check_msg(msg.channel_id.say(&context.http, "Pong!").await);
+
+    Ok(())
+}
+
+#[command]
+async fn skip(ctx: &Context, msg: &Message) -> CommandResult {
+    let guild = msg.guild(&ctx.cache).unwrap();
+    let guild_id = guild.id;
+
+    let mut guild_map_guard = GUILD_MEDIA_PLAYER_MAP.lock().await;
+    let guild_map = guild_map_guard.as_mut().unwrap();
+
+    if let Some(media_player) = guild_map.get(&guild_id) {
+        media::media_player_skip(media_player.clone()).await;
+    } else {
+        check_msg(msg.reply(ctx, "Not connected to a voice channel!").await);
+    }
 
     Ok(())
 }
