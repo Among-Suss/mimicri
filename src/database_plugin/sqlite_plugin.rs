@@ -2,7 +2,7 @@ use std::env;
 
 use sqlite::OpenFlags;
 
-use super::database::DatabasePlugin;
+use super::plugin::DatabasePlugin;
 
 const USER_TABLE: &str = "users";
 const SONG_TABLE: &str = "songs";
@@ -170,12 +170,14 @@ impl DatabasePlugin for SQLitePlugin {
 
         let query = format!(
             "
+            BEGIN TRANSACTION;
                 INSERT OR IGNORE INTO {USER_TABLE} VALUES ({});
                 INSERT OR IGNORE INTO {SONG_TABLE} VALUES ('{}');
                 INSERT OR IGNORE INTO {PLAYLIST_TABLE} VALUES (NULL, '{}', {});
                 INSERT OR IGNORE INTO {PLAYLIST_MAP_TABLE} VALUES (NULL, (
                     SELECT id FROM {PLAYLIST_TABLE} WHERE name='{}' AND user_id={} LIMIT 1
                 ), '{}');
+            COMMIT;
                 ",
             user_id, url, name, user_id, name, user_id, url
         );

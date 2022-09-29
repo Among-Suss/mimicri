@@ -25,6 +25,18 @@ pub struct MediaInfo {
     pub metadata: HashMap<String, String>,
 }
 
+impl Clone for MediaInfo {
+    fn clone(&self) -> Self {
+        Self {
+            url: self.url.clone(),
+            title: self.title.clone(),
+            duration: self.duration.clone(),
+            description: self.description.clone(),
+            metadata: self.metadata.clone(),
+        }
+    }
+}
+
 pub struct MediaItem {
     pub url: String,
     pub title: String,

@@ -6,7 +6,7 @@
 //! git = "https://github.com/serenity-rs/serenity.git"
 //! features = ["client", "standard_framework", "voice"]
 //! ```
-mod database;
+mod database_plugin;
 mod media;
 mod metadata;
 mod play;
@@ -40,7 +40,8 @@ use serenity::{
 };
 
 use crate::{
-    database::{database::DatabasePluginInit, sqlite_plugin::SQLitePlugin},
+    database_plugin::{plugin::DatabasePluginInit, sqlite_plugin::SQLitePlugin},
+    media::MediaInfo,
     play::{queue_search, queue_url},
 };
 
@@ -164,6 +165,8 @@ async fn play(ctx: &Context, msg: &Message, args: Args) -> CommandResult {
         return Ok(());
     }
 
+    let mut queued_videos: Vec<MediaInfo> = Vec::new();
+
     if url.starts_with("http") {
         match queue_url(
             guild_id,
@@ -174,7 +177,7 @@ async fn play(ctx: &Context, msg: &Message, args: Args) -> CommandResult {
         )
         .await
         {
-            Ok(_) => (),
+            Ok(info) => queued_videos.push(info),
             Err(err) => {
                 check_msg(msg.channel_id.say(&ctx.http, err).await);
             }
@@ -189,10 +192,16 @@ async fn play(ctx: &Context, msg: &Message, args: Args) -> CommandResult {
         )
         .await
         {
-            Ok(_) => (),
+            Ok(info) => queued_videos.push(info),
             Err(err) => {
                 check_msg(msg.channel_id.say(&ctx.http, err).await);
             }
+        }
+
+        let db_plugin = database_plugin::plugin::get(ctx).await.unwrap().clone();
+
+        for video in queued_videos.into_iter() {
+            db_plugin.history_set(*msg.author.id.as_u64(), video.url);
         }
     }
 

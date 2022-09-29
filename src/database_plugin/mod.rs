@@ -1,2 +1,2 @@
-pub mod database;
+pub mod plugin;
 pub mod sqlite_plugin;

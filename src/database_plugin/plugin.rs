@@ -1,4 +1,8 @@
-use serenity::{client::ClientBuilder, prelude::TypeMapKey};
+use serenity::{
+    client::{ClientBuilder, Context},
+    prelude::TypeMapKey,
+};
+
 use std::sync::Arc;
 
 pub struct DatabasePluginKey;
@@ -47,4 +51,10 @@ impl DatabasePluginInit for ClientBuilder {
         plugin.init_db();
         register_database_plugin(self, plugin)
     }
+}
+
+pub async fn get(ctx: &Context) -> Option<Arc<dyn DatabasePlugin>> {
+    let data = ctx.data.read().await;
+
+    data.get::<DatabasePluginKey>().cloned()
 }
