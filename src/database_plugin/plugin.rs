@@ -16,13 +16,13 @@ pub type DBError = &'static str;
 pub trait DatabasePlugin: Sync + Send {
     fn init_db(&self);
 
-    fn history_set(&self, user_id: i64, url: &String) -> Result<(), DBError>;
-    fn history_get(&self, user_id: i64, amount: u32, page: u32) -> Result<Vec<String>, DBError>;
+    fn set_history(&self, user_id: i64, url: &String) -> Result<(), DBError>;
+    fn get_history(&self, user_id: i64, amount: u32, page: u32) -> Result<Vec<String>, DBError>;
 
-    fn playlist_create(&self, user_id: i64, name: &String) -> Result<(), DBError>;
-    fn playlist_remove(&self, user_id: i64, name: &String) -> Result<(), DBError>;
+    fn create_playlist(&self, user_id: i64, name: &String) -> Result<(), DBError>;
+    fn delete_playlist(&self, user_id: i64, name: &String) -> Result<(), DBError>;
 
-    fn playlist_get(
+    fn get_playlist(
         &self,
         user_id: i64,
         name: &String,
@@ -30,8 +30,8 @@ pub trait DatabasePlugin: Sync + Send {
         page: u32,
     ) -> Result<Vec<String>, DBError>;
 
-    fn playlist_song_add(&self, user_id: i64, name: &String, url: &String) -> Result<(), DBError>;
-    fn playlist_song_remove(
+    fn add_playlist_song(&self, user_id: i64, name: &String, url: &String) -> Result<(), DBError>;
+    fn delete_playlist_song(
         &self,
         user_id: i64,
         name: &String,
