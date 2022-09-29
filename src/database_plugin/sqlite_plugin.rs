@@ -2,7 +2,7 @@ use std::env;
 
 use sqlite::OpenFlags;
 
-use super::plugin::DatabasePlugin;
+use super::plugin::{DBError, DatabasePlugin};
 
 const USER_TABLE: &str = "users";
 const SONG_TABLE: &str = "songs";
@@ -143,6 +143,7 @@ impl DatabasePlugin for SQLitePlugin {
 
         Ok(())
     }
+
     fn playlist_remove(&self, user_id: u64, name: String) -> Result<(), &'static str> {
         if self.is_disabled() {
             return Ok(());
@@ -207,11 +208,7 @@ impl DatabasePlugin for SQLitePlugin {
         todo!()
     }
 
-    fn remove_song(&self, url: String) -> Result<(), &'static str> {
-        if self.is_disabled() {
-            return Ok(());
-        }
-
+    fn playlist_get(&self, user_id: u64, name: String) -> Result<Vec<String>, DBError> {
         todo!()
     }
 }

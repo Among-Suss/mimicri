@@ -201,7 +201,8 @@ async fn play(ctx: &Context, msg: &Message, args: Args) -> CommandResult {
         let db_plugin = database_plugin::plugin::get(ctx).await.unwrap().clone();
 
         for video in queued_videos.into_iter() {
-            db_plugin.history_set(*msg.author.id.as_u64(), video.url);
+            // TODO ignore result as errors for now as errors are printing internally
+            let _ = db_plugin.history_set(*msg.author.id.as_u64(), video.url);
         }
     }
 
