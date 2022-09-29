@@ -36,7 +36,8 @@ impl Default for SQLitePlugin {
         let db = env::var("PLUGIN_SQLITE").unwrap_or("".to_string());
 
         if db.eq("") {
-            println!("[sqlite] Env var PLUGIN_SQLITE not set, disabling sqlite plugin");
+            println!(
+                "[sqlite] sqlite plugin disabled. Set PLUGIN_SQLITE to a file name like 'mimicri.db' to enable the plugin.");
         }
 
         SQLitePlugin { path: db }
