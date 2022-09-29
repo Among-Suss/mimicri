@@ -12,11 +12,8 @@ mod metadata;
 mod play;
 
 use dotenv::dotenv;
-use media::{GlobalMediaPlayer};
-use std::{
-    env,
-    sync::Arc,
-};
+use media::GlobalMediaPlayer;
+use std::{env, sync::Arc};
 
 // This trait adds the `register_songbird` and `register_songbird_with` methods
 // to the client builder below, making it easy to install this voice client.
@@ -40,7 +37,7 @@ use serenity::{
 
 use crate::{
     database_plugin::{plugin::DatabasePluginInit, sqlite_plugin::SQLitePlugin},
-    media::MediaInfo,
+    media::{MediaInfo, MessageContext},
     play::{queue_search, queue_url},
 };
 
@@ -156,31 +153,20 @@ async fn play(ctx: &Context, msg: &Message, args: Args) -> CommandResult {
 
     let mut queued_videos: Vec<MediaInfo> = Vec::new();
 
+    let message_ctx = MessageContext {
+        channel: msg.channel_id,
+        http: ctx.http.clone(),
+    };
+
     if url.starts_with("http") {
-        match queue_url(
-            guild_id,
-            url,
-            msg.channel_id,
-            ctx.http.clone(),
-            &GLOBAL_MEDIA_PLAYER,
-        )
-        .await
-        {
+        match queue_url(guild_id, url, message_ctx, &GLOBAL_MEDIA_PLAYER).await {
             Ok(info) => queued_videos.push(info),
             Err(err) => {
                 check_msg(msg.channel_id.say(&ctx.http, err).await);
             }
         }
     } else {
-        match queue_search(
-            guild_id,
-            url,
-            msg.channel_id,
-            ctx.http.clone(),
-            &GLOBAL_MEDIA_PLAYER,
-        )
-        .await
-        {
+        match queue_search(guild_id, url, message_ctx, &GLOBAL_MEDIA_PLAYER).await {
             Ok(info) => queued_videos.push(info),
             Err(err) => {
                 check_msg(msg.channel_id.say(&ctx.http, err).await);
@@ -240,12 +226,12 @@ async fn deafen(ctx: &Context, msg: &Message) -> CommandResult {
 #[command]
 #[only_in(guilds)]
 async fn join(ctx: &Context, msg: &Message) -> CommandResult {
-
     let guild = msg.guild(&ctx.cache).unwrap();
     let guild_id = guild.id;
 
     let channel_id = guild
-        .voice_states.get(&msg.author.id)
+        .voice_states
+        .get(&msg.author.id)
         .and_then(|voice_state| voice_state.channel_id);
 
     let connect_to = match channel_id {
@@ -257,8 +243,10 @@ async fn join(ctx: &Context, msg: &Message) -> CommandResult {
         }
     };
 
-    let manager = songbird::get(ctx).await
-        .expect("Songbird Voice client placed in at initialisation.").clone();
+    let manager = songbird::get(ctx)
+        .await
+        .expect("Songbird Voice client placed in at initialisation.")
+        .clone();
 
     let handler = manager.join(guild_id, connect_to).await;
 
@@ -268,7 +256,7 @@ async fn join(ctx: &Context, msg: &Message) -> CommandResult {
             Ok(_) => (),
             Err(err) => {
                 check_msg(msg.reply(ctx, err).await);
-            },
+            }
         }
     }
 

@@ -1,6 +1,6 @@
 use serenity::async_trait;
 use serenity::http::Http;
-use serenity::model::prelude::{GuildId, Message, ChannelId};
+use serenity::model::prelude::{ChannelId, GuildId, Message};
 use songbird::input::{Input, Restartable};
 use songbird::tracks::TrackHandle;
 use songbird::{Call, Event, EventContext, EventHandler};
@@ -14,6 +14,20 @@ pub struct MediaEventHandler {
 impl MediaEventHandler {
     fn new(signaler: Arc<(async_std::sync::Mutex<bool>, async_std::sync::Condvar)>) -> Self {
         MediaEventHandler { signaler }
+    }
+}
+
+pub struct MessageContext {
+    pub channel: ChannelId,
+    pub http: Arc<Http>,
+}
+
+impl Clone for MessageContext {
+    fn clone(&self) -> Self {
+        Self {
+            channel: self.channel.clone(),
+            http: self.http.clone(),
+        }
     }
 }
 
@@ -44,8 +58,7 @@ pub struct MediaItem {
     pub description: String,
     pub metadata: HashMap<String, String>,
 
-    pub request_msg_channel: serenity::model::prelude::ChannelId,
-    pub request_msg_http: Arc<Http>,
+    pub message_ctx: MessageContext,
 }
 
 pub struct MediaQueue {
@@ -68,11 +81,11 @@ pub struct GlobalMediaPlayer {
 }
 
 impl GlobalMediaPlayer {
-    pub const UNINITIALIZED: GlobalMediaPlayer = GlobalMediaPlayer { guild_media_player_map: async_std::sync::Mutex::new(None) };
+    pub const UNINITIALIZED: GlobalMediaPlayer = GlobalMediaPlayer {
+        guild_media_player_map: async_std::sync::Mutex::new(None),
+    };
 
-    pub async fn init_self(
-        &self
-    ){
+    pub async fn init_self(&self) {
         let mut guild_map = self.guild_media_player_map.lock().await;
         match &*guild_map {
             Some(_) => panic!("HashMap should be uninitialized!"),
@@ -84,15 +97,19 @@ impl GlobalMediaPlayer {
         &self,
         guild_id: GuildId,
         voice_channel_handler: Arc<serenity::prelude::Mutex<Call>>,
-    ) -> Result<(), String>{
-
+    ) -> Result<(), String> {
         let mut guild_map_guard = self.guild_media_player_map.lock().await;
         let guild_map = guild_map_guard.as_mut().unwrap();
 
         if guild_map.contains_key(&guild_id) {
-            return Err(String::from("Already connected to a voice channel in this server!"));
+            return Err(String::from(
+                "Already connected to a voice channel in this server!",
+            ));
         } else {
-            guild_map.insert(guild_id, ChannelMediaPlayer::create_and_initialize(guild_id, voice_channel_handler));
+            guild_map.insert(
+                guild_id,
+                ChannelMediaPlayer::create_and_initialize(guild_id, voice_channel_handler),
+            );
         }
 
         Ok(())
@@ -110,7 +127,7 @@ impl GlobalMediaPlayer {
         }
     }
 
-    pub async fn quit(&self, guild_id: GuildId) -> Result<(), String>{
+    pub async fn quit(&self, guild_id: GuildId) -> Result<(), String> {
         let mut guild_map_guard = self.guild_media_player_map.lock().await;
         let guild_map = guild_map_guard.as_mut().unwrap();
 
@@ -120,10 +137,14 @@ impl GlobalMediaPlayer {
         } else {
             Err(String::from("Not connected to a voice channel!"))
         }
-
     }
 
-    pub async fn read_queue(&self, guild_id: GuildId, start: usize, length: usize) -> Result<LinkedList<MediaInfo>, String>{
+    pub async fn read_queue(
+        &self,
+        guild_id: GuildId,
+        start: usize,
+        length: usize,
+    ) -> Result<LinkedList<MediaInfo>, String> {
         let mut guild_map_guard = self.guild_media_player_map.lock().await;
         let guild_map = guild_map_guard.as_mut().unwrap();
 
@@ -135,17 +156,16 @@ impl GlobalMediaPlayer {
     }
 
     pub async fn enqueue(
-        &self, 
+        &self,
         guild_id: GuildId,
         info: MediaInfo,
-        request_msg_channel: ChannelId,
-        request_msg_http: Arc<Http>,
+        message_ctx: MessageContext,
     ) -> Result<(), &'static str> {
         let mut guild_map_guard = self.guild_media_player_map.lock().await;
         let guild_map = guild_map_guard.as_mut().unwrap();
 
         if let Some(media_player) = guild_map.get(&guild_id) {
-            media_player.enqueue(info, request_msg_channel, request_msg_http).await;
+            media_player.enqueue(info, message_ctx).await;
         } else {
             return Err("Not connected to a voice channel!");
         }
@@ -154,17 +174,16 @@ impl GlobalMediaPlayer {
     }
 
     pub async fn enqueue_batch(
-        &self, 
+        &self,
         guild_id: GuildId,
         infos: LinkedList<MediaInfo>,
-        request_msg_channel: ChannelId,
-        request_msg_http: Arc<Http>,
+        message_ctx: MessageContext,
     ) -> Result<(), &'static str> {
         let mut guild_map_guard = self.guild_media_player_map.lock().await;
         let guild_map = guild_map_guard.as_mut().unwrap();
 
         if let Some(media_player) = guild_map.get(&guild_id) {
-            media_player.enqueue_batch(infos, request_msg_channel, request_msg_http).await;
+            media_player.enqueue_batch(infos, message_ctx).await;
         } else {
             return Err("Not connected to a voice channel!");
         }
@@ -175,28 +194,23 @@ impl GlobalMediaPlayer {
 
 impl MediaInfo {
     pub fn empty_media_info() -> Self {
-        MediaInfo { 
-            url: String::from(""), 
-            title: String::from(""), 
-            duration: 0, 
-            description: String::from(""), 
-            metadata: HashMap::new(), 
+        MediaInfo {
+            url: String::from(""),
+            title: String::from(""),
+            duration: 0,
+            description: String::from(""),
+            metadata: HashMap::new(),
         }
     }
 
-    pub fn as_media_item(
-        self,
-        request_msg_channel: serenity::model::prelude::ChannelId,
-        request_msg_http: Arc<Http>,
-    ) -> MediaItem {
+    pub fn as_media_item(self, message_ctx: MessageContext) -> MediaItem {
         MediaItem {
             url: self.url,
             title: self.title,
             duration: self.duration,
             description: self.description,
             metadata: self.metadata,
-            request_msg_channel: request_msg_channel,
-            request_msg_http: request_msg_http,
+            message_ctx: message_ctx,
         }
     }
 
@@ -225,7 +239,6 @@ impl EventHandler for MediaEventHandler {
 }
 
 impl ChannelMediaPlayer {
-
     pub fn create_and_initialize(
         guild_id: GuildId,
         voice_channel_handler: Arc<serenity::prelude::Mutex<Call>>,
@@ -242,7 +255,10 @@ impl ChannelMediaPlayer {
             ),
         });
 
-        tokio::spawn(Self::media_player_run(voice_channel_handler, media_player.clone()));
+        tokio::spawn(Self::media_player_run(
+            voice_channel_handler,
+            media_player.clone(),
+        ));
 
         media_player
     }
@@ -264,90 +280,76 @@ impl ChannelMediaPlayer {
         };
     }
 
-    pub async fn read_queue(
-        &self,
-        start: usize,
-        length: usize,
-    ) -> LinkedList<MediaInfo> {
-
+    pub async fn read_queue(&self, start: usize, length: usize) -> LinkedList<MediaInfo> {
         let mut return_queue = LinkedList::new();
 
-        let (shared_media_queue_lock, _) =
-            &self.lock_protected_media_queue;
-    
-        let smq_locked = shared_media_queue_lock.lock().await;
-    
-        for (i, media_item) in smq_locked.queue.iter().enumerate() {
+        let (shared_media_queue_lock, _) = &self.lock_protected_media_queue;
 
-            if i >= start+length {
+        let smq_locked = shared_media_queue_lock.lock().await;
+
+        for (i, media_item) in smq_locked.queue.iter().enumerate() {
+            if i >= start + length {
                 break;
             }
 
             if i >= start {
                 match media_item {
-                    Some(media_item) => return_queue.push_back(MediaInfo::from_media_item(media_item)),
+                    Some(media_item) => {
+                        return_queue.push_back(MediaInfo::from_media_item(media_item))
+                    }
                     None => return_queue.push_back(MediaInfo::empty_media_info()),
                 }
             }
-
         }
-        
-        return_queue
 
+        return_queue
     }
 
-    pub async fn enqueue(
-        &self,
-        media_info: MediaInfo,
-        request_msg_channel: serenity::model::prelude::ChannelId,
-        request_msg_http: Arc<Http>,
-    ) {
+    pub async fn enqueue(&self, media_info: MediaInfo, message_ctx: MessageContext) {
         let (shared_media_queue_lock, shared_media_queue_condvar) =
             &self.lock_protected_media_queue;
-    
+
         let mut smq_locked = shared_media_queue_lock.lock().await;
-    
-        smq_locked.queue.push_front(Some(
-            media_info.as_media_item(request_msg_channel, request_msg_http),
-        ));
-    
+
+        smq_locked
+            .queue
+            .push_front(Some(media_info.as_media_item(message_ctx)));
+
         shared_media_queue_condvar.notify_one();
     }
 
     pub async fn enqueue_batch(
         &self,
         mut media_infos: LinkedList<MediaInfo>,
-        request_msg_channel: serenity::model::prelude::ChannelId,
-        request_msg_http: Arc<Http>,
+        message_ctx: MessageContext,
     ) {
         let (shared_media_queue_lock, shared_media_queue_condvar) =
             &self.lock_protected_media_queue;
-    
+
         let mut smq_locked = shared_media_queue_lock.lock().await;
-    
+
         loop {
             let media_info = match media_infos.pop_front() {
                 Some(x) => x,
                 None => break,
             };
-            smq_locked.queue.push_front(Some(
-                media_info.as_media_item(request_msg_channel, request_msg_http.clone()),
-            ));
+            smq_locked
+                .queue
+                .push_front(Some(media_info.as_media_item(message_ctx.clone())));
         }
-    
+
         shared_media_queue_condvar.notify_one();
     }
 
     pub async fn quit(&self) {
-        let (shared_media_queue_lock, _) =
-            &self.lock_protected_media_queue;
-    
+        let (shared_media_queue_lock, _) = &self.lock_protected_media_queue;
+
         {
             let mut shared_media_queue = shared_media_queue_lock.lock().await;
-    
+
             shared_media_queue.running_state = false;
             shared_media_queue.queue.push_front(None);
-    
+
             match &shared_media_queue.now_playing {
                 Some((_, track_handle)) => {
                     let res = track_handle.stop();
@@ -369,13 +371,13 @@ impl ChannelMediaPlayer {
     ) {
         let (shared_media_queue_lock, shared_media_queue_condvar) =
             &shared_channel_media_player.lock_protected_media_queue;
-    
+
         'medialoop: loop {
             let end_signaler = Arc::new((
                 async_std::sync::Mutex::new(false),
                 async_std::sync::Condvar::new(),
             ));
-    
+
             let running_state = {
                 // lock and wait for song queue to not be empty
                 let mut shared_media_queue = shared_media_queue_lock.lock().await;
@@ -383,21 +385,21 @@ impl ChannelMediaPlayer {
                     shared_media_queue = shared_media_queue_condvar.wait(shared_media_queue).await;
                 }
                 let next_song = shared_media_queue.queue.pop_back().unwrap();
-    
+
                 if !shared_media_queue.running_state || next_song.is_none() {
                     break 'medialoop;
                 }
-    
+
                 // get song from queue and create source, track, trackhandle
                 // set current song
                 let next_song = next_song.unwrap();
-                let request_msg_channel = next_song.request_msg_channel;
-                let request_msg_http = next_song.request_msg_http.clone();
+                let request_msg_channel = next_song.message_ctx.channel;
+                let request_msg_http = next_song.message_ctx.http.clone();
                 let source = match Restartable::ytdl(next_song.url.clone(), false).await {
                     Ok(source) => source,
                     Err(why) => {
                         println!("Error creating source: {:?}", why);
-    
+
                         check_msg(
                             request_msg_channel
                                 .say(
@@ -406,13 +408,13 @@ impl ChannelMediaPlayer {
                                 )
                                 .await,
                         );
-    
+
                         continue 'medialoop;
                     }
                 };
                 let (track, track_handle) = songbird::create_player(Input::from(source));
                 shared_media_queue.now_playing = Some((next_song, track_handle.clone()));
-    
+
                 // create a condvar to signal the end of the song
                 // give the condvar to media event handler
                 // register thee handler
@@ -425,7 +427,7 @@ impl ChannelMediaPlayer {
                     Ok(_) => (),
                     Err(err) => {
                         println!("Error on track_handle.add_event {:?}", err);
-    
+
                         check_msg(
                             request_msg_channel
                                 .say(
@@ -434,18 +436,18 @@ impl ChannelMediaPlayer {
                                 )
                                 .await,
                         );
-    
+
                         continue 'medialoop;
                     }
                 }
-    
+
                 // play the track
                 let mut vc_handler = voice_channel_handler.lock().await;
                 vc_handler.play(track);
-    
+
                 shared_media_queue.running_state
             };
-    
+
             // wait for song to finish
             if running_state {
                 let (end_mutex, end_condvar) = &*end_signaler;
@@ -454,7 +456,7 @@ impl ChannelMediaPlayer {
                     end_guard = end_condvar.wait(end_guard).await;
                 }
             }
-    
+
             {
                 let mut shared_media_queue = shared_media_queue_lock.lock().await;
                 shared_media_queue.now_playing = None;
@@ -463,18 +465,13 @@ impl ChannelMediaPlayer {
                 }
             }
         }
-    
-    
+
         {
             let mut shared_media_queue = shared_media_queue_lock.lock().await;
             shared_media_queue.now_playing = None;
         }
     }
-
 }
-
-
-
 
 /// Checks that a message successfully sent; if not, then logs why to stdout.
 fn check_msg(result: Result<Message, serenity::Error>) {
