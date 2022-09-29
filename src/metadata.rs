@@ -26,7 +26,7 @@ impl From<YoutubeDLJson> for MediaInfo {
     }
 }
 
-pub fn get_info(url: String) -> Result<MediaInfo, &'static str> {
+pub fn get_info(url: &String) -> Result<MediaInfo, &'static str> {
     match process::Command::new("youtube-dl")
         .arg("-j")
         .arg(url)
@@ -51,11 +51,11 @@ pub fn get_info(url: String) -> Result<MediaInfo, &'static str> {
     }
 }
 
-pub fn get_search(query: String) -> Result<MediaInfo, &'static str> {
-   get_info(format!("ytsearch:{}", query))
+pub fn get_search(query: &String) -> Result<MediaInfo, &'static str> {
+   get_info(&format!("ytsearch:{}", query))
 }
 
-pub fn get_playlist_sources(url: String) -> Result<LinkedList<MediaInfo>, &'static str> {
+pub fn get_playlist_sources(url: &String) -> Result<LinkedList<MediaInfo>, &'static str> {
     match process::Command::new("youtube-dl")
         .arg("--flat-playlist")
         .arg("-j")
@@ -133,7 +133,7 @@ mod tests {
 
         #[test]
         fn success() {
-            let video = get_search("hello".to_string()).unwrap();
+            let video = get_search(&"hello".to_string()).unwrap();
 
             assert!(!video.url.is_empty());
         }
@@ -145,7 +145,7 @@ mod tests {
         #[test]
         fn success_page() {
             let sources = get_playlist_sources(
-                "https://www.youtube.com/playlist?list=PLdY_Mca8fL_BbtQrKu9lm-LcCcY-t2mVS".to_string(),
+                &"https://www.youtube.com/playlist?list=PLdY_Mca8fL_BbtQrKu9lm-LcCcY-t2mVS".to_string(),
             )
             .unwrap();
 
@@ -157,7 +157,7 @@ mod tests {
         #[test]
         fn success_video() {
             let sources = get_playlist_sources(
-                "https://www.youtube.com/watch?v=nBpgoga0FZ4&list=PLdY_Mca8fL_BbtQrKu9lm-LcCcY-t2mVS".to_string()
+                &"https://www.youtube.com/watch?v=nBpgoga0FZ4&list=PLdY_Mca8fL_BbtQrKu9lm-LcCcY-t2mVS".to_string()
             ) 
             .unwrap();
 
@@ -169,7 +169,7 @@ mod tests {
         #[test]
         fn fail_video_url() {
             let sources =
-                get_playlist_sources("https://www.youtube.com/watch?v=6YBDo5S8soo".to_string())
+                get_playlist_sources(&"https://www.youtube.com/watch?v=6YBDo5S8soo".to_string())
                     .unwrap();
 
             assert_eq!(sources.len(), 1);
@@ -177,7 +177,7 @@ mod tests {
 
         #[test]
         fn fail_not_url() {
-            let sources = get_playlist_sources("amogus".to_string()).unwrap();
+            let sources = get_playlist_sources(&"amogus".to_string()).unwrap();
 
             assert!(sources.is_empty());
         }

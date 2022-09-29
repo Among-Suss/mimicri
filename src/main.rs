@@ -37,8 +37,8 @@ use serenity::{
 
 use crate::{
     database_plugin::{plugin::DatabasePluginInit, sqlite_plugin::SQLitePlugin},
-    media::{MediaInfo, MessageContext},
-    play::{queue_search, queue_url},
+    media::MessageContext,
+    play::queue_url_or_search,
 };
 
 struct Handler;
@@ -151,33 +151,28 @@ async fn play(ctx: &Context, msg: &Message, args: Args) -> CommandResult {
         return Ok(());
     }
 
-    let mut queued_videos: Vec<MediaInfo> = Vec::new();
-
     let message_ctx = MessageContext {
         channel: msg.channel_id,
         http: ctx.http.clone(),
     };
 
-    if url.starts_with("http") {
-        match queue_url(guild_id, url, message_ctx, &GLOBAL_MEDIA_PLAYER).await {
-            Ok(info) => queued_videos.push(info),
-            Err(err) => {
-                check_msg(msg.channel_id.say(&ctx.http, err).await);
-            }
-        }
-    } else {
-        match queue_search(guild_id, url, message_ctx, &GLOBAL_MEDIA_PLAYER).await {
-            Ok(info) => queued_videos.push(info),
-            Err(err) => {
-                check_msg(msg.channel_id.say(&ctx.http, err).await);
-            }
-        }
+    let db_plugin = database_plugin::plugin::get(ctx).await.unwrap().clone();
 
-        let db_plugin = database_plugin::plugin::get(ctx).await.unwrap().clone();
+    match queue_url_or_search(guild_id, &url, message_ctx, &GLOBAL_MEDIA_PLAYER).await {
+        Ok(info) => {
+            check_msg(
+                msg.channel_id
+                    .send_message(&ctx.http, |m| {
+                        m.content("Now playing:")
+                            .embed(|e| e.title(info.title).description(&info.url))
+                    })
+                    .await,
+            );
 
-        for video in queued_videos.into_iter() {
-            // TODO ignore result as errors for now as errors are printing internally
-            let _ = db_plugin.set_history(*msg.author.id.as_u64() as i64, &video.url);
+            let _ = db_plugin.set_history(*ctx.cache.current_user_id().as_u64() as i64, &info.url);
+        }
+        Err(err) => {
+            check_msg(msg.channel_id.say(&ctx.http, err).await);
         }
     }
 

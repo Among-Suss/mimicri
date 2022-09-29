@@ -1,18 +1,26 @@
-use std::sync::Arc;
-
-use serenity::{
-    http::Http,
-    model::prelude::{ChannelId, GuildId},
-};
+use serenity::model::prelude::GuildId;
 
 use crate::{
     media::{GlobalMediaPlayer, MediaInfo, MessageContext},
     metadata::{get_info, get_search},
 };
 
+pub async fn queue_url_or_search(
+    guild_id: GuildId,
+    query: &String,
+    message_ctx: MessageContext,
+    global_media_player: &GlobalMediaPlayer,
+) -> Result<MediaInfo, &'static str> {
+    if query.starts_with("http") {
+        return queue_url(guild_id, query, message_ctx, global_media_player).await;
+    } else {
+        return queue_search(guild_id, query, message_ctx, global_media_player).await;
+    }
+}
+
 pub async fn queue_search(
     guild_id: GuildId,
-    query: String,
+    query: &String,
     message_ctx: MessageContext,
     global_media_player: &GlobalMediaPlayer,
 ) -> Result<MediaInfo, &'static str> {
@@ -28,7 +36,7 @@ pub async fn queue_search(
 
 pub async fn queue_url(
     guild_id: GuildId,
-    url: String,
+    url: &String,
     message_ctx: MessageContext,
     global_media_player: &GlobalMediaPlayer,
 ) -> Result<MediaInfo, &'static str> {
