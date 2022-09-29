@@ -110,7 +110,7 @@ impl GlobalMediaPlayer {
         }
     }
 
-    pub async fn leave(&self, guild_id: GuildId) -> Result<(), String>{
+    pub async fn quit(&self, guild_id: GuildId) -> Result<(), String>{
         let mut guild_map_guard = self.guild_media_player_map.lock().await;
         let guild_map = guild_map_guard.as_mut().unwrap();
 

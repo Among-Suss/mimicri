@@ -288,7 +288,7 @@ async fn leave(ctx: &Context, msg: &Message) -> CommandResult {
     let has_handler = manager.get(guild_id).is_some();
 
     if has_handler {
-        let res = GLOBAL_MEDIA_PLAYER.leave(guild_id).await;
+        let res = GLOBAL_MEDIA_PLAYER.quit(guild_id).await;
         match res {
             Ok(_) => (),
             Err(err) => check_msg(msg.reply(ctx, err).await),
