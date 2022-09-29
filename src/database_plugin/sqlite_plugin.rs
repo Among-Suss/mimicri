@@ -1,5 +1,6 @@
 use std::env;
 
+use serenity::model::connection;
 use sqlite::OpenFlags;
 
 use super::plugin::{DBError, DatabasePlugin};
@@ -103,15 +104,15 @@ impl DatabasePlugin for SQLitePlugin {
             .expect("[sqlite] Unable to init database");
     }
 
-    fn history_set(&self, user_id: u64, url: String) -> Result<(), &'static str> {
-        self.playlist_song_add(user_id, HISTORY_PLAYLIST.to_string(), url)
+    fn history_set(&self, user_id: i64, url: &String) -> Result<(), DBError> {
+        self.playlist_song_add(user_id, &HISTORY_PLAYLIST.to_string(), url)
     }
 
-    fn history_get(&self, user_id: u64, url: String) -> Result<Vec<String>, &'static str> {
-        todo!()
+    fn history_get(&self, user_id: i64, amount: u32, page: u32) -> Result<Vec<String>, DBError> {
+        self.playlist_get(user_id, &"_history".to_string(), amount, page)
     }
 
-    fn playlist_create(&self, user_id: u64, name: String) -> Result<(), &'static str> {
+    fn playlist_create(&self, user_id: i64, name: &String) -> Result<(), DBError> {
         if self.is_disabled() {
             return Ok(());
         }
@@ -144,7 +145,7 @@ impl DatabasePlugin for SQLitePlugin {
         Ok(())
     }
 
-    fn playlist_remove(&self, user_id: u64, name: String) -> Result<(), &'static str> {
+    fn playlist_remove(&self, user_id: i64, name: &String) -> Result<(), DBError> {
         if self.is_disabled() {
             return Ok(());
         }
@@ -152,12 +153,7 @@ impl DatabasePlugin for SQLitePlugin {
         todo!()
     }
 
-    fn playlist_song_add(
-        &self,
-        user_id: u64,
-        name: String,
-        url: String,
-    ) -> Result<(), &'static str> {
+    fn playlist_song_add(&self, user_id: i64, name: &String, url: &String) -> Result<(), DBError> {
         if self.is_disabled() {
             return Ok(());
         }
@@ -197,10 +193,10 @@ impl DatabasePlugin for SQLitePlugin {
 
     fn playlist_song_remove(
         &self,
-        user_id: u64,
-        name: String,
-        url: String,
-    ) -> Result<(), &'static str> {
+        user_id: i64,
+        name: &String,
+        url: &String,
+    ) -> Result<(), DBError> {
         if self.is_disabled() {
             return Ok(());
         }
@@ -208,21 +204,77 @@ impl DatabasePlugin for SQLitePlugin {
         todo!()
     }
 
-    fn playlist_get(&self, user_id: u64, name: String) -> Result<Vec<String>, DBError> {
-        todo!()
+    fn playlist_get(
+        &self,
+        user_id: i64,
+        name: &String,
+        amount: u32,
+        page: u32,
+    ) -> Result<Vec<String>, DBError> {
+        let connection = match self.get_connection() {
+            Ok(c) => c,
+            Err(err) => {
+                println!("[sqlite] {}", err);
+                return Err("Unable to connect to database");
+            }
+        };
+
+        let query = format!(
+            "
+            SELECT song_url
+            FROM {PLAYLIST_MAP_TABLE} 
+            WHERE playlist_id=(
+                SELECT id
+                FROM {PLAYLIST_TABLE}
+                WHERE user_id={} AND name='{}'
+            )
+            ORDER_BY id
+            LIMIT {}
+            OFFSET {}
+            ;
+        ",
+            user_id, name, amount, page
+        );
+
+        let mut cursor = connection.prepare(query).unwrap().into_cursor();
+
+        let mut urls: Vec<String> = Vec::new();
+
+        while let Some(Ok(row)) = cursor.next() {
+            urls.push(row.get::<String, _>(0));
+        }
+
+        Ok(urls)
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use std::fs::remove_file;
+    use serial_test::serial;
 
     use super::*;
 
     const TEST_DB: &str = "test.db";
 
     fn mock_db_plugin() -> SQLitePlugin {
-        let _ = remove_file(TEST_DB);
+        sqlite::Connection::open_with_flags(
+            TEST_DB,
+            OpenFlags::new()
+                .set_create()
+                .set_read_write()
+                .set_full_mutex(),
+        )
+        .unwrap()
+        .execute(
+            "
+            DROP TABLE IF EXISTS users;
+            DROP TABLE IF EXISTS songs;
+            DROP TABLE IF EXISTS playlists;
+            DROP TABLE IF EXISTS playlists_map;
+        
+        ",
+        )
+        .unwrap();
 
         let plugin = SQLitePlugin {
             path: TEST_DB.to_string(),
@@ -238,14 +290,17 @@ mod tests {
         };
         plugin.init_db();
 
-        assert!(plugin.history_set(1, "url".to_string()).is_ok());
+        assert!(plugin.history_set(1, &"url".to_string()).is_ok());
     }
 
     #[test]
     fn set_history() {
         let db = mock_db_plugin();
 
-        db.history_set(1, "url1".to_string()).unwrap();
+        let user_id = 1;
+        let song_url = "url1".to_string();
+
+        db.history_set(user_id, &song_url).unwrap();
 
         let connection = db.get_connection().unwrap();
 
@@ -257,7 +312,7 @@ mod tests {
             .unwrap()
             .unwrap();
 
-        let playlist_row = connection
+        let song_row = connection
             .prepare("SELECT * FROM songs")
             .unwrap()
             .into_cursor()
@@ -265,10 +320,42 @@ mod tests {
             .unwrap()
             .unwrap();
 
-        assert_eq!(user_row.get::<i64, _>(0), 1);
-        assert_eq!(playlist_row.get::<String, _>(0), "url1");
+        let playlist_row = connection
+            .prepare("SELECT * FROM playlists")
+            .unwrap()
+            .into_cursor()
+            .next()
+            .unwrap()
+            .unwrap();
+
+        let playlist_map = connection
+            .prepare("SELECT * FROM playlists_map")
+            .unwrap()
+            .into_cursor()
+            .next()
+            .unwrap()
+            .unwrap();
+
+        assert_eq!(user_row.get::<i64, _>(0), user_id);
+        assert_eq!(song_row.get::<String, _>(0), song_url);
+
+        assert_eq!(playlist_row.get::<String, _>(1), "_history");
+        assert_eq!(playlist_row.get::<i64, _>(2), user_id);
+
+        assert_eq!(playlist_map.get::<String, _>(2), song_url);
     }
 
     #[test]
-    fn get_history() {}
+    fn get_history() {
+        let db = mock_db_plugin();
+
+        let user_id = 1;
+        let song_url = "url1".to_string();
+
+        db.history_set(user_id, &song_url).unwrap();
+
+        let history = db.history_get(user_id, 1, 0).unwrap();
+
+        assert_eq!(song_url, history[0]);
+    }
 }
