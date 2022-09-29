@@ -52,12 +52,7 @@ impl Clone for MediaInfo {
 }
 
 pub struct MediaItem {
-    pub url: String,
-    pub title: String,
-    pub duration: i64,
-    pub description: String,
-    pub metadata: HashMap<String, String>,
-
+    pub info: MediaInfo,
     pub message_ctx: MessageContext,
 }
 
@@ -202,27 +197,6 @@ impl MediaInfo {
             metadata: HashMap::new(),
         }
     }
-
-    pub fn as_media_item(self, message_ctx: MessageContext) -> MediaItem {
-        MediaItem {
-            url: self.url,
-            title: self.title,
-            duration: self.duration,
-            description: self.description,
-            metadata: self.metadata,
-            message_ctx: message_ctx,
-        }
-    }
-
-    pub fn from_media_item(media_item: &MediaItem) -> Self {
-        Self {
-            url: media_item.url.clone(),
-            title: media_item.title.clone(),
-            duration: media_item.duration.clone(),
-            description: media_item.description.clone(),
-            metadata: media_item.metadata.clone(),
-        }
-    }
 }
 
 #[async_trait]
@@ -294,9 +268,7 @@ impl ChannelMediaPlayer {
 
             if i >= start {
                 match media_item {
-                    Some(media_item) => {
-                        return_queue.push_back(MediaInfo::from_media_item(media_item))
-                    }
+                    Some(media_item) => return_queue.push_back(media_item.info.clone()),
                     None => return_queue.push_back(MediaInfo::empty_media_info()),
                 }
             }
@@ -305,7 +277,7 @@ impl ChannelMediaPlayer {
         return_queue
     }
 
-    pub async fn enqueue(&self, media_info: MediaInfo, message_ctx: MessageContext) {
+    pub async fn enqueue(&self, info: MediaInfo, message_ctx: MessageContext) {
         let (shared_media_queue_lock, shared_media_queue_condvar) =
             &self.lock_protected_media_queue;
 
@@ -313,7 +285,7 @@ impl ChannelMediaPlayer {
 
         smq_locked
             .queue
-            .push_front(Some(media_info.as_media_item(message_ctx)));
+            .push_front(Some(MediaItem { info, message_ctx }));
 
         shared_media_queue_condvar.notify_one();
     }
@@ -333,9 +305,10 @@ impl ChannelMediaPlayer {
                 Some(x) => x,
                 None => break,
             };
-            smq_locked
-                .queue
-                .push_front(Some(media_info.as_media_item(message_ctx.clone())));
+            smq_locked.queue.push_front(Some(MediaItem {
+                info: media_info,
+                message_ctx: message_ctx.clone(),
+            }));
         }
 
         shared_media_queue_condvar.notify_one();
@@ -395,7 +368,7 @@ impl ChannelMediaPlayer {
                 let next_song = next_song.unwrap();
                 let request_msg_channel = next_song.message_ctx.channel;
                 let request_msg_http = next_song.message_ctx.http.clone();
-                let source = match Restartable::ytdl(next_song.url.clone(), false).await {
+                let source = match Restartable::ytdl(next_song.info.url.clone(), false).await {
                     Ok(source) => source,
                     Err(why) => {
                         println!("Error creating source: {:?}", why);
