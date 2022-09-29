@@ -22,12 +22,18 @@ An imposter Discord music bot.
 ### Dependencies
  - youtube-dl
  - ffmpeg
+ 
+### Optional Dependencies
+ - sqlite
 
 ### Config
 Create a `.env` file in the root directory, and add the following variables:
 ```sh
 DISCORD_TOKEN = *your bot token*
 BOT_PREFIX = *bot prefix*
+
+# Optional
+PLUGIN_SQLITE= *database_filename.sqlite*
 ```
 
 Alternatively, you can just set the environment variables before running.
