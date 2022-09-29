@@ -190,30 +190,30 @@ mod tests {
         fn single_line() {
             let timestamps = get_timestamps("3:23 My description".to_string());
 
-            assert!(timestamps[0].label.eq("My description"));
-            assert!(timestamps[0].timestamp.eq("3:23"));
+            assert_eq!(timestamps[0].label, "My description");
+            assert_eq!(timestamps[0].timestamp, "3:23");
             assert_eq!(timestamps[0].seconds, 3 * 60 + 23);
         }
 
         #[test]
         fn mid_line() {
-            let timestamps = get_timestamps("Words to ignore 5:55 My description".to_string());
+            let timestamps = get_timestamps("Words to ignore 5:55 Some description".to_string());
 
-            assert!(timestamps[0].label.eq("My description"));
-            assert!(timestamps[0].timestamp.eq("5:55"));
+             assert_eq!(timestamps[0].label, "Some description");
+            assert_eq!(timestamps[0].timestamp, "5:55");
             assert_eq!(timestamps[0].seconds, 5 * 60 + 55);
         }
 
         #[test]
         fn multi_line() {
-            let timestamps = get_timestamps("3:23 My description\n1:6:34 Other desc".to_string());
+            let timestamps = get_timestamps("3:23 My description\n1:06:34 Other desc".to_string());
 
-            assert!(timestamps[0].label.eq("My description"));
-            assert!(timestamps[0].timestamp.eq("3:23"));
+            assert_eq!(timestamps[0].label, "My description");
+            assert_eq!(timestamps[0].timestamp, "3:23");
             assert_eq!(timestamps[0].seconds, 3 * 60 + 23);
 
-            assert!(timestamps[1].label.eq("Other desc"));
-            assert!(timestamps[1].timestamp.eq("1:6:34"));
+            assert_eq!(timestamps[1].label, "Other desc");
+            assert_eq!(timestamps[1].timestamp, "1:06:34");
             assert_eq!(timestamps[1].seconds, 1 * 3600 + 6 * 60 + 34);
         }
 

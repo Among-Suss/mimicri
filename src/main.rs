@@ -191,7 +191,7 @@ async fn play(ctx: &Context, msg: &Message, args: Args) -> CommandResult {
 
         for video in queued_videos.into_iter() {
             // TODO ignore result as errors for now as errors are printing internally
-            let _ = db_plugin.history_set(*msg.author.id.as_u64(), video.url);
+            let _ = db_plugin.set_history(*msg.author.id.as_u64() as i64, &video.url);
         }
     }
 
