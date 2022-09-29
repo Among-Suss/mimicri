@@ -6,9 +6,8 @@ use serenity::{
 };
 
 use crate::{
-    media::{self, MediaInfo},
+    media::{MediaInfo, GlobalMediaPlayer},
     metadata::{get_info, get_search},
-    GuildMediaPlayerMap,
 };
 
 pub async fn queue_search(
@@ -16,7 +15,7 @@ pub async fn queue_search(
     query: String,
     request_msg_channel: ChannelId,
     request_msg_http: Arc<Http>,
-    guild_media_player_map: &GuildMediaPlayerMap,
+    global_media_player: &GlobalMediaPlayer,
 ) -> Result<MediaInfo, &'static str> {
     let video = match get_search(query) {
         Ok(url) => url,
@@ -28,7 +27,7 @@ pub async fn queue_search(
         guild_id,
         request_msg_channel,
         request_msg_http,
-        guild_media_player_map,
+        global_media_player,
     )
     .await?;
 
@@ -40,7 +39,7 @@ pub async fn queue_url(
     url: String,
     request_msg_channel: ChannelId,
     request_msg_http: Arc<Http>,
-    guild_media_player_map: &GuildMediaPlayerMap,
+    global_media_player: &GlobalMediaPlayer,
 ) -> Result<MediaInfo, &'static str> {
     let video = match get_info(url) {
         Ok(url) => url,
@@ -52,7 +51,7 @@ pub async fn queue_url(
         guild_id,
         request_msg_channel,
         request_msg_http,
-        guild_media_player_map,
+        global_media_player,
     )
     .await?;
 
@@ -64,17 +63,7 @@ async fn queue_song(
     guild_id: GuildId,
     request_msg_channel: ChannelId,
     request_msg_http: Arc<Http>,
-    guild_media_player_map: &GuildMediaPlayerMap,
+    global_media_player: &GlobalMediaPlayer,
 ) -> Result<(), &'static str> {
-    let mut guild_map_guard = guild_media_player_map.lock().await;
-    let guild_map = guild_map_guard.as_mut().unwrap();
-
-    if let Some(media_player) = guild_map.get(&guild_id) {
-        media::media_player_enqueue(info, request_msg_channel, request_msg_http, &media_player)
-            .await;
-    } else {
-        return Err("Not connected to a voice channel!");
-    }
-
-    Ok(())
+    global_media_player.enqueue(guild_id, info, request_msg_channel, request_msg_http).await
 }
