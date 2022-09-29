@@ -123,6 +123,17 @@ impl GlobalMediaPlayer {
 
     }
 
+    pub async fn read_queue(&self, guild_id: GuildId, start: usize, length: usize) -> Result<LinkedList<MediaInfo>, String>{
+        let mut guild_map_guard = self.guild_media_player_map.lock().await;
+        let guild_map = guild_map_guard.as_mut().unwrap();
+
+        if let Some(media_player) = guild_map.get(&guild_id) {
+            Ok(media_player.read_queue(start, length).await)
+        } else {
+            Err(String::from("Not connected to a voice channel!"))
+        }
+    }
+
     pub async fn enqueue(
         &self, 
         guild_id: GuildId,
@@ -141,9 +152,38 @@ impl GlobalMediaPlayer {
 
         Ok(())
     }
+
+    pub async fn enqueue_batch(
+        &self, 
+        guild_id: GuildId,
+        infos: LinkedList<MediaInfo>,
+        request_msg_channel: ChannelId,
+        request_msg_http: Arc<Http>,
+    ) -> Result<(), &'static str> {
+        let mut guild_map_guard = self.guild_media_player_map.lock().await;
+        let guild_map = guild_map_guard.as_mut().unwrap();
+
+        if let Some(media_player) = guild_map.get(&guild_id) {
+            media_player.enqueue_batch(infos, request_msg_channel, request_msg_http).await;
+        } else {
+            return Err("Not connected to a voice channel!");
+        }
+
+        Ok(())
+    }
 }
 
 impl MediaInfo {
+    pub fn empty_media_info() -> Self {
+        MediaInfo { 
+            url: String::from(""), 
+            title: String::from(""), 
+            duration: 0, 
+            description: String::from(""), 
+            metadata: HashMap::new(), 
+        }
+    }
+
     pub fn as_media_item(
         self,
         request_msg_channel: serenity::model::prelude::ChannelId,
@@ -157,6 +197,16 @@ impl MediaInfo {
             metadata: self.metadata,
             request_msg_channel: request_msg_channel,
             request_msg_http: request_msg_http,
+        }
+    }
+
+    pub fn from_media_item(media_item: &MediaItem) -> Self {
+        Self {
+            url: media_item.url.clone(),
+            title: media_item.title.clone(),
+            duration: media_item.duration.clone(),
+            description: media_item.description.clone(),
+            metadata: media_item.metadata.clone(),
         }
     }
 }
@@ -214,6 +264,38 @@ impl ChannelMediaPlayer {
         };
     }
 
+    pub async fn read_queue(
+        &self,
+        start: usize,
+        length: usize,
+    ) -> LinkedList<MediaInfo> {
+
+        let mut return_queue = LinkedList::new();
+
+        let (shared_media_queue_lock, _) =
+            &self.lock_protected_media_queue;
+    
+        let smq_locked = shared_media_queue_lock.lock().await;
+    
+        for (i, media_item) in smq_locked.queue.iter().enumerate() {
+
+            if i >= start+length {
+                break;
+            }
+
+            if i >= start {
+                match media_item {
+                    Some(media_item) => return_queue.push_back(MediaInfo::from_media_item(media_item)),
+                    None => return_queue.push_back(MediaInfo::empty_media_info()),
+                }
+            }
+
+        }
+        
+        return_queue
+
+    }
+
     pub async fn enqueue(
         &self,
         media_info: MediaInfo,
@@ -228,6 +310,30 @@ impl ChannelMediaPlayer {
         smq_locked.queue.push_front(Some(
             media_info.as_media_item(request_msg_channel, request_msg_http),
         ));
+    
+        shared_media_queue_condvar.notify_one();
+    }
+
+    pub async fn enqueue_batch(
+        &self,
+        mut media_infos: LinkedList<MediaInfo>,
+        request_msg_channel: serenity::model::prelude::ChannelId,
+        request_msg_http: Arc<Http>,
+    ) {
+        let (shared_media_queue_lock, shared_media_queue_condvar) =
+            &self.lock_protected_media_queue;
+    
+        let mut smq_locked = shared_media_queue_lock.lock().await;
+    
+        loop {
+            let media_info = match media_infos.pop_front() {
+                Some(x) => x,
+                None => break,
+            };
+            smq_locked.queue.push_front(Some(
+                media_info.as_media_item(request_msg_channel, request_msg_http.clone()),
+            ));
+        }
     
         shared_media_queue_condvar.notify_one();
     }
