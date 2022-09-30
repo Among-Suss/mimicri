@@ -1,3 +1,9 @@
+use std::cmp;
+
+use serenity::model::prelude::GuildId;
+
+use crate::config;
+
 static SENSITIVE_CHARACTERS: [&str; 7] = ["\\", "*", "_", "~", "`", "|", ">"];
 
 /// Escapes all sensitize Discord characters
@@ -15,7 +21,7 @@ pub fn escape_string(text: &String) -> String {
     sanitized_text
 }
 
-/// Slices the string from zero to width, and rounds to the nearest code poi
+/// Slices the string from zero to width, and rounds to the nearest code point
 /// Does not account for unicode size, as unicode characters tend to be larger.
 pub fn limit_string_length(text: &String, width: usize) -> String {
     if text.len() <= width {
@@ -37,9 +43,57 @@ pub fn limit_string_length(text: &String, width: usize) -> String {
     return text.clone();
 }
 
+pub enum ProgressBarStyle {
+    Marker,
+    Filler,
+}
+
+// TODO Fix this shit
+pub fn create_progress_bar(guild_id: GuildId, percent: f32, style: ProgressBarStyle) -> String {
+    let length = config::progress_bar_length(guild_id) as usize;
+
+    match style {
+        ProgressBarStyle::Marker => {
+            let marker = config::progress_bar_marker(guild_id);
+            let track = config::progress_bar_track(guild_id);
+
+            generate_marker_progress_bar(length, percent, &marker, &track)
+        }
+        ProgressBarStyle::Filler => todo!(),
+    }
+}
+
+fn generate_marker_progress_bar(
+    length: usize,
+    percent: f32,
+    marker: &String,
+    track: &String,
+) -> String {
+    let total_count = length as i32;
+    let display_count = (length as f32 * percent) as i32;
+
+    track.repeat(cmp::min(display_count, total_count - 1) as usize)
+        + &marker
+        + &track.repeat(cmp::max(total_count - display_count - 1, 0) as usize)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn marker_progress_bar_start() {
+        let bar = generate_marker_progress_bar(10, 0.0, &"x".to_string(), &"-".to_string());
+
+        assert_eq!(bar, "x---------")
+    }
+
+    #[test]
+    fn marker_progress_bar_end() {
+        let bar = generate_marker_progress_bar(10, 1.0, &"x".to_string(), &"-".to_string());
+
+        assert_eq!(bar, "---------x")
+    }
 
     #[test]
     fn escaping_string() {

@@ -8,7 +8,7 @@ mod strings;
 
 use dotenv::dotenv;
 use media::GlobalMediaPlayer;
-use std::{env, sync::Arc};
+use std::{cmp, env, sync::Arc};
 
 use songbird::SerenityInit;
 
@@ -31,7 +31,7 @@ use crate::{
     database_plugin::{plugin::DatabasePluginInit, sqlite_plugin::SQLitePlugin},
     message_context::MessageContext,
     play::queue_url_or_search,
-    strings::{escape_string, limit_string_length},
+    strings::{create_progress_bar, escape_string, limit_string_length, ProgressBarStyle},
 };
 
 struct Handler;
@@ -204,7 +204,7 @@ async fn skip(ctx: &Context, msg: &Message) -> CommandResult {
 #[only_in(guilds)]
 async fn queue(ctx: &Context, msg: &Message, args: Args) -> CommandResult {
     let mut page = str::parse::<usize>(args.raw().nth(0).unwrap_or_default()).unwrap_or_default();
-    page = if page > 0 { page - 1 } else { 0 };
+    page = cmp::max(page - 1, 0);
 
     let guild = msg.guild(&ctx.cache).unwrap();
     let guild_id = guild.id;
@@ -264,11 +264,33 @@ async fn now_playing(ctx: &Context, msg: &Message) -> CommandResult {
         channel: msg.channel_id,
         http: ctx.http.clone(),
     };
-    let res = GLOBAL_MEDIA_PLAYER.read_queue(guild_id, 0, 1).await;
+    let res = GLOBAL_MEDIA_PLAYER.now_playing(guild_id).await;
 
     match res {
-        Ok((queue, len)) => {}
-        Err(err) => message_ctx.send_error(err).await,
+        Ok(res_tuple) => {
+            match res_tuple {
+                Some((info, time)) => {
+                    message_ctx
+                        .reply_embed(
+                            &msg,
+                            "Now playing:",
+                            &info.title,
+                            &format!(
+                                "{}\n{}",
+                                &info.url,
+                                create_progress_bar(
+                                    guild_id,
+                                    time as f32 / info.duration as f32,
+                                    ProgressBarStyle::Marker
+                                )
+                            ),
+                        )
+                        .await;
+                }
+                None => message_ctx.reply_error(&msg, "No songs playing!").await,
+            };
+        }
+        Err(err) => message_ctx.reply_error(&msg, err).await,
     }
 
     Ok(())

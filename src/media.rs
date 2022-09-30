@@ -267,7 +267,7 @@ impl ChannelMediaPlayer {
         };
     }
 
-    async fn seek(&self, time: i64) -> Result<(), String>{
+    async fn seek(&self, time: i64) -> Result<(), String> {
         let (shared_media_queue_lock, _) = &self.lock_protected_media_queue;
         let smq_locked = shared_media_queue_lock.lock().await;
 
@@ -276,9 +276,7 @@ impl ChannelMediaPlayer {
                 if time < media_item.info.duration {
                     match track_handle.seek_time(Duration::from_secs(time as u64)) {
                         Ok(_) => Ok(()),
-                        Err(err) => {
-                            Err(format!("Unable to seek track: {:?}", err))
-                        },
+                        Err(err) => Err(format!("Unable to seek track: {:?}", err)),
                     }
                 } else {
                     Err(format!("Unable to seek track: time out of range"))
@@ -288,7 +286,7 @@ impl ChannelMediaPlayer {
         }
     }
 
-    async fn now_playing(&self) -> Result<Option<(MediaInfo, i64)>, String>{
+    async fn now_playing(&self) -> Result<Option<(MediaInfo, i64)>, String> {
         let (shared_media_queue_lock, _) = &self.lock_protected_media_queue;
         let smq_locked = shared_media_queue_lock.lock().await;
         match &smq_locked.now_playing {
@@ -298,10 +296,10 @@ impl ChannelMediaPlayer {
                     Ok(trackstate) => {
                         let position = trackstate.position.as_secs() as i64;
                         Ok(Some((media_item.info.clone(), position)))
-                    },
+                    }
                     Err(trackerror) => {
                         Err(String::from("Unable to get current song info from Track"))
-                    },
+                    }
                 }
             }
             None => Ok(None),
