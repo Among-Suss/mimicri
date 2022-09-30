@@ -60,6 +60,67 @@ impl MessageContext {
                 .await,
         );
     }
+
+    pub async fn reply(&self, reply_message: &Message, message: impl Display) {
+        check_msg(
+            self.channel
+                .send_message(self.http.clone(), |m| {
+                    m.content(message)
+                        .reference_message(reply_message)
+                        .allowed_mentions(|f| {
+                            f.replied_user(false)
+                                .parse(ParseValue::Everyone)
+                                .parse(ParseValue::Users)
+                                .parse(ParseValue::Roles)
+                        });
+                    m
+                })
+                .await,
+        );
+    }
+
+    pub async fn reply_error(&self, reply_message: &Message, message: impl Display) {
+        check_msg(
+            self.channel
+                .send_message(self.http.clone(), |m| {
+                    m.content(message)
+                        .reference_message(reply_message)
+                        .allowed_mentions(|f| {
+                            f.replied_user(false)
+                                .parse(ParseValue::Everyone)
+                                .parse(ParseValue::Users)
+                                .parse(ParseValue::Roles)
+                        });
+                    m
+                })
+                .await,
+        );
+    }
+
+    pub async fn reply_embed(
+        &self,
+        reply_message: &Message,
+        message: impl Display,
+        title: impl Display,
+        description: impl Display,
+    ) {
+        check_msg(
+            self.channel
+                .send_message(self.http.clone(), |m| {
+                    m.content(message)
+                        .embed(|e| e.title(title).description(description))
+                        .reference_message(reply_message)
+                        .allowed_mentions(|f| {
+                            f.replied_user(false)
+                                .parse(ParseValue::Everyone)
+                                .parse(ParseValue::Users)
+                                .parse(ParseValue::Roles)
+                        });
+                    m
+                })
+                .await,
+        );
+    }
 }
 
 pub fn create_info_message(

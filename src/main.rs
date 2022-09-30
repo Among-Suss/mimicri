@@ -113,6 +113,11 @@ async fn play(ctx: &Context, msg: &Message, args: Args) -> CommandResult {
     let guild = msg.guild(&ctx.cache).unwrap();
     let guild_id = guild.id;
 
+    let message_ctx = MessageContext {
+        channel: msg.channel_id,
+        http: ctx.http.clone(),
+    };
+
     // Join vc
     let user_vc = match guild
         .voice_states
@@ -121,7 +126,9 @@ async fn play(ctx: &Context, msg: &Message, args: Args) -> CommandResult {
     {
         Some(vc) => vc,
         None => {
-            check_msg(msg.reply(&ctx.http, "Ur not even in a vc idio").await);
+            message_ctx
+                .reply_error(msg, "Ur not even in a vc idio")
+                .await;
             return Ok(());
         }
     };
@@ -133,14 +140,15 @@ async fn play(ctx: &Context, msg: &Message, args: Args) -> CommandResult {
     {
         Some(bot_vc) => {
             if bot_vc != user_vc {
-                check_msg(msg.reply(&ctx.http, "Wrong channel dumbass").await);
+                message_ctx.reply_error(msg, "Wrong channel dumbass").await;
+
                 return Ok(());
             }
         }
         None => {
             match join(ctx, msg, args.clone()).await {
                 Ok(_) => (),
-                Err(err) => check_msg(msg.reply(&ctx.http, err).await),
+                Err(err) => message_ctx.reply_error(msg, err).await,
             };
         }
     }
@@ -149,32 +157,24 @@ async fn play(ctx: &Context, msg: &Message, args: Args) -> CommandResult {
     let url = args.raw().collect::<Vec<&str>>().join(" ");
 
     if url.eq("") {
-        check_msg(
-            msg.reply(&ctx.http, "You didn't send anything, dumbass")
-                .await,
-        );
+        message_ctx
+            .reply_error(msg, "You didn't send anything dumbass")
+            .await;
 
         return Ok(());
     }
-
-    let message_ctx = MessageContext {
-        channel: msg.channel_id,
-        http: ctx.http.clone(),
-    };
 
     let db_plugin = database_plugin::plugin::get(ctx).await.unwrap().clone();
 
     match queue_url_or_search(guild_id, &url, message_ctx.clone(), &GLOBAL_MEDIA_PLAYER).await {
         Ok(info) => {
             message_ctx
-                .send_embed("Queued song:", &info.title, &info.url)
+                .reply_embed(msg, "Queued song:", &info.title, &info.url)
                 .await;
 
             let _ = db_plugin.set_history(*ctx.cache.current_user_id().as_u64() as i64, &info.url);
         }
-        Err(err) => {
-            message_ctx.send_error(err).await;
-        }
+        Err(err) => message_ctx.reply_error(msg, err).await,
     }
 
     Ok(())
