@@ -134,17 +134,23 @@ impl GlobalMediaPlayer {
         }
     }
 
+    /// Reads the queue between start and length.
+    ///
+    /// Returns a tuple of the queue as a LinkedList and the total size of the queue
     pub async fn read_queue(
         &self,
         guild_id: GuildId,
         start: usize,
         length: usize,
-    ) -> Result<LinkedList<MediaInfo>, String> {
+    ) -> Result<(LinkedList<MediaInfo>, usize), String> {
         let mut guild_map_guard = self.guild_media_player_map.lock().await;
         let guild_map = guild_map_guard.as_mut().unwrap();
 
         if let Some(media_player) = guild_map.get(&guild_id) {
-            Ok(media_player.read_queue(start, length).await)
+            Ok((
+                media_player.read_queue(start, length).await,
+                media_player.len().await,
+            ))
         } else {
             Err(String::from("Not connected to a voice channel!"))
         }
@@ -213,7 +219,7 @@ impl EventHandler for MediaEventHandler {
 }
 
 impl ChannelMediaPlayer {
-    pub fn create_and_initialize(
+    fn create_and_initialize(
         guild_id: GuildId,
         voice_channel_handler: Arc<serenity::prelude::Mutex<Call>>,
     ) -> Arc<Self> {
@@ -237,7 +243,7 @@ impl ChannelMediaPlayer {
         media_player
     }
 
-    pub async fn skip(&self) {
+    async fn skip(&self) {
         let (shared_media_queue_lock, _) = &self.lock_protected_media_queue;
         let smq_locked = shared_media_queue_lock.lock().await;
         match &smq_locked.now_playing {
@@ -254,7 +260,7 @@ impl ChannelMediaPlayer {
         };
     }
 
-    pub async fn read_queue(&self, start: usize, length: usize) -> LinkedList<MediaInfo> {
+    async fn read_queue(&self, start: usize, length: usize) -> LinkedList<MediaInfo> {
         let mut return_queue = LinkedList::new();
 
         let (shared_media_queue_lock, _) = &self.lock_protected_media_queue;
@@ -265,7 +271,7 @@ impl ChannelMediaPlayer {
             match &smq_locked.now_playing {
                 Some((media_item, _)) => {
                     return_queue.push_front(media_item.info.clone());
-                },
+                }
                 None => return_queue.push_front(MediaInfo::empty_media_info()),
             }
             (start, length - 1)
@@ -289,7 +295,15 @@ impl ChannelMediaPlayer {
         return_queue
     }
 
-    pub async fn enqueue(&self, info: MediaInfo, message_ctx: MessageContext) {
+    async fn len(&self) -> usize {
+        let (shared_media_queue_lock, _) = &self.lock_protected_media_queue;
+
+        let smq_locked = shared_media_queue_lock.lock().await;
+
+        smq_locked.queue.len()
+    }
+
+    async fn enqueue(&self, info: MediaInfo, message_ctx: MessageContext) {
         let (shared_media_queue_lock, shared_media_queue_condvar) =
             &self.lock_protected_media_queue;
 
@@ -302,7 +316,7 @@ impl ChannelMediaPlayer {
         shared_media_queue_condvar.notify_one();
     }
 
-    pub async fn enqueue_batch(
+    async fn enqueue_batch(
         &self,
         mut media_infos: LinkedList<MediaInfo>,
         message_ctx: MessageContext,
@@ -326,7 +340,7 @@ impl ChannelMediaPlayer {
         shared_media_queue_condvar.notify_one();
     }
 
-    pub async fn quit(&self) {
+    async fn quit(&self) {
         let (shared_media_queue_lock, _) = &self.lock_protected_media_queue;
 
         {

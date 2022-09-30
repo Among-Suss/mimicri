@@ -32,6 +32,9 @@ use crate::{
     strings::{escape_string, limit_string_length},
 };
 
+static QUEUE_TEXT_LENGTH: usize = 75;
+static QUEUE_PAGE_SIZE: usize = 10;
+
 struct Handler;
 
 #[async_trait]
@@ -130,7 +133,7 @@ async fn play(ctx: &Context, msg: &Message, args: Args) -> CommandResult {
     }
 
     // Get url
-    let url = args.raw().collect::<Vec<&str>>().join(", ");
+    let url = args.raw().collect::<Vec<&str>>().join(" ");
 
     if url.eq("") {
         check_msg(
@@ -191,25 +194,41 @@ async fn skip(ctx: &Context, msg: &Message) -> CommandResult {
 
 #[command]
 #[only_in(guilds)]
-async fn queue(ctx: &Context, msg: &Message) -> CommandResult {
+async fn queue(ctx: &Context, msg: &Message, args: Args) -> CommandResult {
+    let mut page = str::parse::<usize>(args.raw().nth(0).unwrap_or_default()).unwrap_or_default();
+    page = if page > 0 { page - 1 } else { 0 };
+
     let guild = msg.guild(&ctx.cache).unwrap();
     let guild_id = guild.id;
 
-    let res = GLOBAL_MEDIA_PLAYER.read_queue(guild_id, 0, 10).await;
+    let res = GLOBAL_MEDIA_PLAYER
+        .read_queue(guild_id, page * QUEUE_PAGE_SIZE, QUEUE_PAGE_SIZE)
+        .await;
 
     match res {
-        Ok(queue) => {
-            let mut str = "".to_string();
+        Ok((queue, len)) => {
+            if len == 0 {
+                // TODO empty queue command
+                return Ok(());
+            }
+
+            let mut str = String::new();
 
             for (i, info) in queue.iter().enumerate() {
                 str += &format!(
-                    "{}. [{}]({})\n",
-                    i + 1,
-                    escape_string(&limit_string_length(&info.title, 50)),
+                    "{}. **{}**  [↗️]({})\n",
+                    i + 1 + page * QUEUE_PAGE_SIZE,
+                    escape_string(&limit_string_length(&info.title, QUEUE_TEXT_LENGTH)),
                     info.url
                 )
                 .to_string();
             }
+
+            str += &format!(
+                "\n...\n\nPage {} of {}",
+                page + 1,
+                len / QUEUE_PAGE_SIZE + 1
+            );
 
             check_msg(
                 msg.channel_id
