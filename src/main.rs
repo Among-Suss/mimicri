@@ -59,7 +59,13 @@ async fn main() {
     // Configure the client with your Discord bot token in the environment.
     dotenv().ok();
 
-    let token = env::var("DISCORD_TOKEN").expect("Expected a token in the environment");
+    let token = match env::var("DISCORD_TOKEN") {
+        Ok(var) => var,
+        Err(_) => {
+            println!("[Warning] No DISCORD_TOKEN environment variable present. Have you set the correct environment variables?\n\tSee .sample.env for a list of available environment variables.");
+            return;
+        }
+    };
 
     let prefix = env::var("BOT_PREFIX").unwrap_or("~".to_owned());
 
