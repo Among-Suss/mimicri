@@ -39,6 +39,9 @@ PLUGIN_SQLITE= *database_filename.sqlite*
 Alternatively, you can just set the environment variables before running.
 
 ## Running
+
+Make sure to set the required environment variables.
+
 For basic debugging, run:
 ```sh
 cargo run
@@ -48,5 +51,3 @@ For deploying:
 ```sh
 cargo run --release
 ```
-
-Make sure to set the required environment variables.
