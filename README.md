@@ -4,7 +4,7 @@ THIS PROJECT IS UNDER HEAVY DEVELOPMENT
 A small, performant, easy to host Discord music bot written in Rust with multi-server history database functionality.
 
 # Features
-- [ ] Search
+- [x] Search
   - [ ] Platform-specific/fallback search
 - [ ] Status (current song, queue, metadata)
 - [ ] Seeking
@@ -13,9 +13,11 @@ A small, performant, easy to host Discord music bot written in Rust with multi-s
 - [ ] Timestamps
   - [ ] Timestamp shuffling
 - [ ] Roles
-- [ ] Song history
+- [x] Song history
   - [ ] Custom playlists
   - [ ] Randomized songs from history
+- [ ] Voice Commands
+- [ ] User-friend Interface
 
 ## Setup
 
