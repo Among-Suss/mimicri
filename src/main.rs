@@ -62,7 +62,7 @@ async fn main() {
     let token = match env::var("DISCORD_TOKEN") {
         Ok(var) => var,
         Err(_) => {
-            println!("[Warning] No DISCORD_TOKEN environment variable present. Have you set the correct environment variables?\n\tSee .sample.env for a list of available environment variables.");
+            println!("[Warning] No DISCORD_TOKEN environment variable present. Have you set the correct environment variables?\n\tSee the README for a list of available environment variables.");
             return;
         }
     };
