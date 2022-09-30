@@ -273,15 +273,15 @@ impl ChannelMediaPlayer {
             (start - 1, length)
         };
 
-        for (i, media_item) in smq_locked.queue.iter().enumerate() {
+        for (i, media_item) in smq_locked.queue.iter().rev().enumerate() {
             if i >= start + length {
                 break;
             }
 
             if i >= start {
                 match media_item {
-                    Some(media_item) => return_queue.push_front(media_item.info.clone()),
-                    None => return_queue.push_front(MediaInfo::empty_media_info()),
+                    Some(media_item) => return_queue.push_back(media_item.info.clone()),
+                    None => return_queue.push_back(MediaInfo::empty_media_info()),
                 }
             }
         }
