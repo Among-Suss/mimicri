@@ -10,7 +10,7 @@ pub async fn queue_url_or_search(
     query: &String,
     message_ctx: MessageContext,
     global_media_player: &GlobalMediaPlayer,
-) -> Result<MediaInfo, &'static str> {
+) -> Result<MediaInfo, String> {
     if query.starts_with("http") {
         return queue_url(guild_id, query, message_ctx, global_media_player).await;
     } else {
@@ -23,7 +23,7 @@ pub async fn queue_search(
     query: &String,
     message_ctx: MessageContext,
     global_media_player: &GlobalMediaPlayer,
-) -> Result<MediaInfo, &'static str> {
+) -> Result<MediaInfo, String> {
     let video = match get_search(query) {
         Ok(url) => url,
         Err(err) => return Err(err),
@@ -39,7 +39,7 @@ pub async fn queue_url(
     url: &String,
     message_ctx: MessageContext,
     global_media_player: &GlobalMediaPlayer,
-) -> Result<MediaInfo, &'static str> {
+) -> Result<MediaInfo, String> {
     let video = match get_info(url) {
         Ok(url) => url,
         Err(err) => return Err(err),
@@ -55,7 +55,7 @@ async fn queue_song(
     guild_id: GuildId,
     message_ctx: MessageContext,
     global_media_player: &GlobalMediaPlayer,
-) -> Result<(), &'static str> {
+) -> Result<(), String> {
     global_media_player
         .enqueue(guild_id, info, message_ctx)
         .await

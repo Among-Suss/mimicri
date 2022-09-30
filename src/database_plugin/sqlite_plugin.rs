@@ -26,7 +26,7 @@ impl SQLitePlugin {
         ) {
             Err(err) => {
                 println!("[sqlite] {}", err.to_string());
-                Err("Unable to connect to database")
+                Err("Unable to connect to database".to_string())
             }
             Ok(mut c) => {
                 match c.set_busy_timeout(10000) {
@@ -137,7 +137,7 @@ impl DatabasePlugin for SQLitePlugin {
             Ok(_) => (),
             Err(err) => {
                 println!("[sqlite] Failed to create playlist {}; {}", name, err);
-                return Err("Failed to create playlist");
+                return Err("Failed to create playlist".to_string());
             }
         }
 
@@ -163,7 +163,7 @@ impl DatabasePlugin for SQLitePlugin {
             Ok(_) => (),
             Err(err) => {
                 println!("[sqlite] {}", err.to_string());
-                return Err("Failed to delete song");
+                return Err("Failed to delete song".to_string());
             }
         }
 
@@ -195,7 +195,7 @@ impl DatabasePlugin for SQLitePlugin {
             Ok(_) => (),
             Err(err) => {
                 println!("[sqlite] {}", err.to_string());
-                return Err("Failed to set history");
+                return Err("Failed to set history".to_string());
             }
         }
 
@@ -234,7 +234,7 @@ impl DatabasePlugin for SQLitePlugin {
             Ok(_) => (),
             Err(err) => {
                 println!("[sqlite] {}", err.to_string());
-                return Err("Failed to delete song");
+                return Err("Failed to delete song".to_string());
             }
         }
 

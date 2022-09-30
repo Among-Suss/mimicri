@@ -161,14 +161,14 @@ impl GlobalMediaPlayer {
         guild_id: GuildId,
         info: MediaInfo,
         message_ctx: MessageContext,
-    ) -> Result<(), &'static str> {
+    ) -> Result<(), String> {
         let mut guild_map_guard = self.guild_media_player_map.lock().await;
         let guild_map = guild_map_guard.as_mut().unwrap();
 
         if let Some(media_player) = guild_map.get(&guild_id) {
             media_player.enqueue(info, message_ctx).await;
         } else {
-            return Err("Not connected to a voice channel!");
+            return Err("Not connected to a voice channel!".to_string());
         }
 
         Ok(())
@@ -179,14 +179,14 @@ impl GlobalMediaPlayer {
         guild_id: GuildId,
         infos: LinkedList<MediaInfo>,
         message_ctx: MessageContext,
-    ) -> Result<(), &'static str> {
+    ) -> Result<(), String> {
         let mut guild_map_guard = self.guild_media_player_map.lock().await;
         let guild_map = guild_map_guard.as_mut().unwrap();
 
         if let Some(media_player) = guild_map.get(&guild_id) {
             media_player.enqueue_batch(infos, message_ctx).await;
         } else {
-            return Err("Not connected to a voice channel!");
+            return Err("Not connected to a voice channel!".to_string());
         }
 
         Ok(())

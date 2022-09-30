@@ -32,13 +32,13 @@ impl From<YoutubeDLJson> for MediaInfo {
     }
 }
 
-pub fn get_info(url: &String) -> Result<MediaInfo, &'static str> {
+pub fn get_info(url: &String) -> Result<MediaInfo, String> {
     match process::Command::new("youtube-dl")
         .arg("-j")
         .arg(url)
         .output()
     {
-        Err(_) => return Err("Failed to run youtube-dl"),
+        Err(_) => return Err("Failed to run youtube-dl".to_string()),
         Ok(output) => {
             let output_str = String::from_utf8_lossy(&output.stdout);
             let err_str = String::from_utf8_lossy(&output.stderr);
@@ -50,10 +50,10 @@ pub fn get_info(url: &String) -> Result<MediaInfo, &'static str> {
             let json_result: serde_json::Result<YoutubeDLJson> = serde_json::from_str(&output_str);
 
             match json_result {
-                Err(_) => Err("[metadata] [youtube-dl] Unable to parse json"),
+                Err(_) => Err("[metadata] [youtube-dl] Unable to parse json".to_string()),
                 Ok(json) => {
                     if json.id.is_none() {
-                        return Err("[metadata] [youtube-dl] ID is none");
+                        return Err("[metadata] [youtube-dl] ID is none".to_string());
                     }
 
                     Ok(MediaInfo::from(json))
@@ -63,18 +63,18 @@ pub fn get_info(url: &String) -> Result<MediaInfo, &'static str> {
     }
 }
 
-pub fn get_search(query: &String) -> Result<MediaInfo, &'static str> {
+pub fn get_search(query: &String) -> Result<MediaInfo, String> {
     get_info(&format!("ytsearch:{}", query))
 }
 
-pub fn get_playlist_sources(url: &String) -> Result<LinkedList<MediaInfo>, &'static str> {
+pub fn get_playlist_sources(url: &String) -> Result<LinkedList<MediaInfo>, String> {
     match process::Command::new("youtube-dl")
         .arg("--flat-playlist")
         .arg("-j")
         .arg(&url)
         .output()
     {
-        Err(_) => return Err("Failed to run youtube-dl"),
+        Err(_) => return Err("Failed to run youtube-dl".to_string()),
         Ok(output) => {
             let mut sources: LinkedList<MediaInfo> = LinkedList::new();
 

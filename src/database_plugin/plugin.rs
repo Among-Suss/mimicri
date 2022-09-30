@@ -11,7 +11,7 @@ impl TypeMapKey for DatabasePluginKey {
     type Value = Arc<dyn DatabasePlugin>;
 }
 
-pub type DBError = &'static str;
+pub type DBError = String;
 
 pub trait DatabasePlugin: Sync + Send {
     fn init_db(&self);

@@ -1,3 +1,4 @@
+mod config;
 mod database_plugin;
 mod media;
 mod metadata;
@@ -45,7 +46,19 @@ impl EventHandler for Handler {
 }
 
 #[group]
-#[commands(deafen, join, leave, mute, play, ping, skip, queue, undeafen, unmute)]
+#[commands(
+    deafen,
+    join,
+    leave,
+    mute,
+    play,
+    ping,
+    skip,
+    queue,
+    undeafen,
+    unmute,
+    now_playing
+)]
 struct General;
 
 static GLOBAL_MEDIA_PLAYER: GlobalMediaPlayer = GlobalMediaPlayer::UNINITIALIZED;
@@ -244,6 +257,22 @@ async fn queue(ctx: &Context, msg: &Message, args: Args) -> CommandResult {
                     .await,
             );
         }
+        Err(err) => check_msg(msg.channel_id.say(&ctx.http, err).await),
+    }
+
+    Ok(())
+}
+
+#[command]
+#[only_in(guilds)]
+async fn now_playing(ctx: &Context, msg: &Message) -> CommandResult {
+    let guild = msg.guild(&ctx.cache).unwrap();
+    let guild_id = guild.id;
+
+    let res = GLOBAL_MEDIA_PLAYER.read_queue(guild_id, 0, 1).await;
+
+    match res {
+        Ok((queue, len)) => {}
         Err(err) => check_msg(msg.channel_id.say(&ctx.http, err).await),
     }
 
