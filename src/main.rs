@@ -10,6 +10,7 @@ mod database_plugin;
 mod media;
 mod metadata;
 mod play;
+mod strings;
 
 use dotenv::dotenv;
 use media::GlobalMediaPlayer;
@@ -51,7 +52,7 @@ impl EventHandler for Handler {
 }
 
 #[group]
-#[commands(deafen, join, leave, mute, play, ping, skip, undeafen, unmute)]
+#[commands(deafen, join, leave, mute, play, ping, skip, queue, undeafen, unmute)]
 struct General;
 
 static GLOBAL_MEDIA_PLAYER: GlobalMediaPlayer = GlobalMediaPlayer::UNINITIALIZED;
@@ -163,7 +164,7 @@ async fn play(ctx: &Context, msg: &Message, args: Args) -> CommandResult {
             check_msg(
                 msg.channel_id
                     .send_message(&ctx.http, |m| {
-                        m.content("Now playing:")
+                        m.content("Queued song:")
                             .embed(|e| e.title(info.title).description(&info.url))
                     })
                     .await,
@@ -189,9 +190,39 @@ async fn skip(ctx: &Context, msg: &Message) -> CommandResult {
     match res {
         Ok(_) => check_msg(
             msg.channel_id
-                .send_message(&ctx.http, |m| m.embed(|e| e.title("Skipped song!")))
+                .send_message(&ctx.http, |m| m.embed(|e| e.title("Skipped current song!")))
                 .await,
         ),
+        Err(err) => check_msg(msg.channel_id.say(&ctx.http, err).await),
+    }
+
+    Ok(())
+}
+
+#[command]
+#[only_in(guilds)]
+async fn queue(ctx: &Context, msg: &Message) -> CommandResult {
+    let guild = msg.guild(&ctx.cache).unwrap();
+    let guild_id = guild.id;
+
+    let res = GLOBAL_MEDIA_PLAYER.read_queue(guild_id, 0, 10).await;
+
+    match res {
+        Ok(queue) => {
+            let mut str = "".to_string();
+
+            for (i, info) in queue.iter().enumerate() {
+                str += &format!("{}. [{}]({})\n", i + 1, info.title, info.url).to_string();
+            }
+
+            check_msg(
+                msg.channel_id
+                    .send_message(&ctx.http, |m| {
+                        m.embed(|e| e.title("Queue").description(&str))
+                    })
+                    .await,
+            );
+        }
         Err(err) => check_msg(msg.channel_id.say(&ctx.http, err).await),
     }
 
