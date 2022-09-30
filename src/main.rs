@@ -1,11 +1,3 @@
-//! Requires the "client", "standard_framework", and "voice" features be enabled in your
-//! Cargo.toml, like so:
-//!
-//! ```toml
-//! [dependencies.serenity]
-//! git = "https://github.com/serenity-rs/serenity.git"
-//! features = ["client", "standard_framework", "voice"]
-//! ```
 mod database_plugin;
 mod media;
 mod metadata;
@@ -16,9 +8,6 @@ use dotenv::dotenv;
 use media::GlobalMediaPlayer;
 use std::{env, sync::Arc};
 
-// This trait adds the `register_songbird` and `register_songbird_with` methods
-// to the client builder below, making it easy to install this voice client.
-// The voice client can be retrieved in any command using `songbird::get(ctx).await`.
 use songbird::SerenityInit;
 
 use serenity::{
@@ -40,6 +29,7 @@ use crate::{
     database_plugin::{plugin::DatabasePluginInit, sqlite_plugin::SQLitePlugin},
     media::MessageContext,
     play::queue_url_or_search,
+    strings::escape_string,
 };
 
 struct Handler;
@@ -212,7 +202,13 @@ async fn queue(ctx: &Context, msg: &Message) -> CommandResult {
             let mut str = "".to_string();
 
             for (i, info) in queue.iter().enumerate() {
-                str += &format!("{}. [{}]({})\n", i + 1, info.title, info.url).to_string();
+                str += &format!(
+                    "{}. [{}]({})\n",
+                    i + 1,
+                    escape_string(&info.title),
+                    info.url
+                )
+                .to_string();
             }
 
             check_msg(
