@@ -15,7 +15,7 @@ pub fn escape_string(text: &String) -> String {
     sanitized_text
 }
 
-/// Slices the string from zero to width, and rounds to the nearest code point.
+/// Slices the string from zero to width, and rounds to the nearest code poi
 /// Does not account for unicode size, as unicode characters tend to be larger.
 pub fn limit_string_length(text: &String, width: usize) -> String {
     if text.len() <= width {

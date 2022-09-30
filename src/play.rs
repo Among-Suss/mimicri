@@ -1,7 +1,8 @@
 use serenity::model::prelude::GuildId;
 
 use crate::{
-    media::{GlobalMediaPlayer, MediaInfo, MessageContext},
+    media::{GlobalMediaPlayer, MediaInfo},
+    message_context::MessageContext,
     metadata::{get_info, get_search},
 };
 

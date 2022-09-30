@@ -1,11 +1,12 @@
 use serenity::async_trait;
-use serenity::http::Http;
-use serenity::model::prelude::{ChannelId, GuildId, Message};
+use serenity::model::prelude::GuildId;
 use songbird::input::{Input, Restartable};
 use songbird::tracks::TrackHandle;
 use songbird::{Call, Event, EventContext, EventHandler};
 use std::collections::{HashMap, LinkedList};
 use std::sync::Arc;
+
+use crate::message_context::MessageContext;
 
 pub struct MediaEventHandler {
     signaler: Arc<(async_std::sync::Mutex<bool>, async_std::sync::Condvar)>,
@@ -14,20 +15,6 @@ pub struct MediaEventHandler {
 impl MediaEventHandler {
     fn new(signaler: Arc<(async_std::sync::Mutex<bool>, async_std::sync::Condvar)>) -> Self {
         MediaEventHandler { signaler }
-    }
-}
-
-pub struct MessageContext {
-    pub channel: ChannelId,
-    pub http: Arc<Http>,
-}
-
-impl Clone for MessageContext {
-    fn clone(&self) -> Self {
-        Self {
-            channel: self.channel.clone(),
-            http: self.http.clone(),
-        }
     }
 }
 
@@ -147,10 +134,7 @@ impl GlobalMediaPlayer {
         let guild_map = guild_map_guard.as_mut().unwrap();
 
         if let Some(media_player) = guild_map.get(&guild_id) {
-            Ok((
-                media_player.read_queue(start, length).await,
-                media_player.len().await,
-            ))
+            Ok(media_player.read_queue(start, length).await)
         } else {
             Err(String::from("Not connected to a voice channel!"))
         }
@@ -260,7 +244,7 @@ impl ChannelMediaPlayer {
         };
     }
 
-    async fn read_queue(&self, start: usize, length: usize) -> LinkedList<MediaInfo> {
+    async fn read_queue(&self, start: usize, length: usize) -> (LinkedList<MediaInfo>, usize) {
         let mut return_queue = LinkedList::new();
 
         let (shared_media_queue_lock, _) = &self.lock_protected_media_queue;
@@ -292,10 +276,17 @@ impl ChannelMediaPlayer {
             }
         }
 
-        return_queue
+        (
+            return_queue,
+            smq_locked.queue.len()
+                + match smq_locked.now_playing {
+                    Some(_) => 1,
+                    None => 0,
+                },
+        )
     }
 
-    async fn len(&self) -> usize {
+    async fn queue_length(&self) -> usize {
         let (shared_media_queue_lock, _) = &self.lock_protected_media_queue;
 
         let smq_locked = shared_media_queue_lock.lock().await;
@@ -392,21 +383,15 @@ impl ChannelMediaPlayer {
                 // get song from queue and create source, track, trackhandle
                 // set current song
                 let next_song = next_song.unwrap();
-                let request_msg_channel = next_song.message_ctx.channel;
-                let request_msg_http = next_song.message_ctx.http.clone();
+                let message_ctx = next_song.message_ctx.clone();
                 let source = match Restartable::ytdl(next_song.info.url.clone(), false).await {
                     Ok(source) => source,
                     Err(why) => {
                         println!("Error creating source: {:?}", why);
 
-                        check_msg(
-                            request_msg_channel
-                                .say(
-                                    &request_msg_http,
-                                    "Error playing track: youtube-dl or ffmpeg failed",
-                                )
-                                .await,
-                        );
+                        message_ctx
+                            .send_error("Error playing track: youtube-dl or ffmpeg failed")
+                            .await;
 
                         continue 'medialoop;
                     }
@@ -427,14 +412,11 @@ impl ChannelMediaPlayer {
                     Err(err) => {
                         println!("Error on track_handle.add_event {:?}", err);
 
-                        check_msg(
-                            request_msg_channel
-                                .say(
-                                    &request_msg_http,
-                                    "Error playing track: Unable to initialize TrackEvent handler.",
-                                )
-                                .await,
-                        );
+                        message_ctx
+                            .send_error(
+                                "Error playing track: Unable to initialize TrackEvent handler.",
+                            )
+                            .await;
 
                         continue 'medialoop;
                     }
@@ -469,12 +451,5 @@ impl ChannelMediaPlayer {
             let mut shared_media_queue = shared_media_queue_lock.lock().await;
             shared_media_queue.now_playing = None;
         }
-    }
-}
-
-/// Checks that a message successfully sent; if not, then logs why to stdout.
-fn check_msg(result: Result<Message, serenity::Error>) {
-    if let Err(why) = result {
-        println!("Error sending message: {:?}", why);
     }
 }

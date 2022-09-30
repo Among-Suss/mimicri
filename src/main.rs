@@ -1,6 +1,7 @@
 mod config;
 mod database_plugin;
 mod media;
+mod message_context;
 mod metadata;
 mod play;
 mod strings;
@@ -28,7 +29,7 @@ use serenity::{
 
 use crate::{
     database_plugin::{plugin::DatabasePluginInit, sqlite_plugin::SQLitePlugin},
-    media::MessageContext,
+    message_context::MessageContext,
     play::queue_url_or_search,
     strings::{escape_string, limit_string_length},
 };
@@ -120,11 +121,7 @@ async fn play(ctx: &Context, msg: &Message, args: Args) -> CommandResult {
     {
         Some(vc) => vc,
         None => {
-            check_msg(
-                msg.channel_id
-                    .say(&ctx.http, "Ur not even in a vc idio")
-                    .await,
-            );
+            check_msg(msg.reply(&ctx.http, "Ur not even in a vc idio").await);
             return Ok(());
         }
     };
@@ -136,14 +133,14 @@ async fn play(ctx: &Context, msg: &Message, args: Args) -> CommandResult {
     {
         Some(bot_vc) => {
             if bot_vc != user_vc {
-                check_msg(msg.channel_id.say(&ctx.http, "Wrong channel dumbass").await);
+                check_msg(msg.reply(&ctx.http, "Wrong channel dumbass").await);
                 return Ok(());
             }
         }
         None => {
             match join(ctx, msg, args.clone()).await {
                 Ok(_) => (),
-                Err(err) => check_msg(msg.channel_id.say(&ctx.http, err).await),
+                Err(err) => check_msg(msg.reply(&ctx.http, err).await),
             };
         }
     }
@@ -153,8 +150,7 @@ async fn play(ctx: &Context, msg: &Message, args: Args) -> CommandResult {
 
     if url.eq("") {
         check_msg(
-            msg.channel_id
-                .say(&ctx.http, "You didn't send anything, dumbass")
+            msg.reply(&ctx.http, "You didn't send anything, dumbass")
                 .await,
         );
 
@@ -168,21 +164,16 @@ async fn play(ctx: &Context, msg: &Message, args: Args) -> CommandResult {
 
     let db_plugin = database_plugin::plugin::get(ctx).await.unwrap().clone();
 
-    match queue_url_or_search(guild_id, &url, message_ctx, &GLOBAL_MEDIA_PLAYER).await {
+    match queue_url_or_search(guild_id, &url, message_ctx.clone(), &GLOBAL_MEDIA_PLAYER).await {
         Ok(info) => {
-            check_msg(
-                msg.channel_id
-                    .send_message(&ctx.http, |m| {
-                        m.content("Queued song:")
-                            .embed(|e| e.title(info.title).description(&info.url))
-                    })
-                    .await,
-            );
+            message_ctx
+                .send_embed("Queued song:", &info.title, &info.url)
+                .await;
 
             let _ = db_plugin.set_history(*ctx.cache.current_user_id().as_u64() as i64, &info.url);
         }
         Err(err) => {
-            check_msg(msg.channel_id.say(&ctx.http, err).await);
+            message_ctx.send_error(err).await;
         }
     }
 
@@ -196,13 +187,14 @@ async fn skip(ctx: &Context, msg: &Message) -> CommandResult {
 
     let res = GLOBAL_MEDIA_PLAYER.skip(guild_id).await;
 
+    let message_context = MessageContext {
+        channel: msg.channel_id,
+        http: ctx.http.clone(),
+    };
+
     match res {
-        Ok(_) => check_msg(
-            msg.channel_id
-                .send_message(&ctx.http, |m| m.embed(|e| e.title("Skipped current song!")))
-                .await,
-        ),
-        Err(err) => check_msg(msg.channel_id.say(&ctx.http, err).await),
+        Ok(_) => message_context.send_info("Skipped current song!").await,
+        Err(err) => message_context.send_info(err).await,
     }
 
     Ok(())
@@ -216,6 +208,11 @@ async fn queue(ctx: &Context, msg: &Message, args: Args) -> CommandResult {
 
     let guild = msg.guild(&ctx.cache).unwrap();
     let guild_id = guild.id;
+
+    let message_ctx = MessageContext {
+        channel: msg.channel_id,
+        http: ctx.http.clone(),
+    };
 
     let queue_page_size = config::queue_page_size(guild_id);
     let queue_text_len = config::queue_text_length(guild_id);
@@ -231,10 +228,10 @@ async fn queue(ctx: &Context, msg: &Message, args: Args) -> CommandResult {
                 return Ok(());
             }
 
-            let mut str = String::new();
+            let mut description = String::new();
 
             for (i, info) in queue.iter().enumerate() {
-                str += &format!(
+                description += &format!(
                     "{}. **{}**  [↗️]({})\n",
                     i + 1 + page * queue_page_size,
                     escape_string(&limit_string_length(&info.title, queue_text_len)),
@@ -243,21 +240,15 @@ async fn queue(ctx: &Context, msg: &Message, args: Args) -> CommandResult {
                 .to_string();
             }
 
-            str += &format!(
+            description += &format!(
                 "\n...\n\nPage {} of {}",
                 page + 1,
                 len / queue_page_size + 1
             );
 
-            check_msg(
-                msg.channel_id
-                    .send_message(&ctx.http, |m| {
-                        m.embed(|e| e.title("Queue").description(&str))
-                    })
-                    .await,
-            );
+            message_ctx.send_embed("", "Queue", description).await;
         }
-        Err(err) => check_msg(msg.channel_id.say(&ctx.http, err).await),
+        Err(err) => message_ctx.send_error(err).await,
     }
 
     Ok(())
@@ -269,11 +260,15 @@ async fn now_playing(ctx: &Context, msg: &Message) -> CommandResult {
     let guild = msg.guild(&ctx.cache).unwrap();
     let guild_id = guild.id;
 
+    let message_ctx = MessageContext {
+        channel: msg.channel_id,
+        http: ctx.http.clone(),
+    };
     let res = GLOBAL_MEDIA_PLAYER.read_queue(guild_id, 0, 1).await;
 
     match res {
         Ok((queue, len)) => {}
-        Err(err) => check_msg(msg.channel_id.say(&ctx.http, err).await),
+        Err(err) => message_ctx.send_error(err).await,
     }
 
     Ok(())
