@@ -48,3 +48,5 @@ For deploying:
 ```sh
 cargo run --release
 ```
+
+Make sure to set the required environment variables.
