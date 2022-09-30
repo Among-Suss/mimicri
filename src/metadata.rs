@@ -1,7 +1,10 @@
+use crate::media::{MediaInfo, MediaItem};
 use regex::Regex;
 use serde::{Deserialize, Serialize};
-use std::{process, collections::{HashMap, LinkedList}};
-use crate::media::{MediaItem, MediaInfo};
+use std::{
+    collections::{HashMap, LinkedList},
+    process,
+};
 
 #[derive(Serialize, Deserialize)]
 struct YoutubeDLJson {
@@ -17,11 +20,14 @@ struct YoutubeDLJson {
 impl From<YoutubeDLJson> for MediaInfo {
     fn from(json: YoutubeDLJson) -> Self {
         MediaInfo {
-            url: format!("https://www.youtube.com/watch?v={}", json.id.unwrap_or("".to_string())), // TODO make this work with soundcloud too
+            url: format!(
+                "https://www.youtube.com/watch?v={}",
+                json.id.unwrap_or("".to_string())
+            ), // TODO make this work with soundcloud too
             title: json.title.unwrap_or("".to_string()),
             description: json.description.unwrap_or("".to_string()),
             duration: json.duration.unwrap_or_default(),
-            metadata: HashMap::new()
+            metadata: HashMap::new(),
         }
     }
 }
@@ -38,21 +44,27 @@ pub fn get_info(url: &String) -> Result<MediaInfo, &'static str> {
             let err_str = String::from_utf8_lossy(&output.stderr);
 
             if !err_str.is_empty() {
-                println!("[playlist] [youtube-dl] {}", err_str);
+                println!("[metadata] [youtube-dl] {}", err_str);
             }
 
             let json_result: serde_json::Result<YoutubeDLJson> = serde_json::from_str(&output_str);
 
             match json_result {
-                Err(_) => Err("FUck"),
-                Ok(json) => Ok(MediaInfo::from(json)),
+                Err(_) => Err("[metadata] [youtube-dl] Unable to parse json"),
+                Ok(json) => {
+                    if json.id.is_none() {
+                        return Err("[metadata] [youtube-dl] ID is none");
+                    }
+
+                    Ok(MediaInfo::from(json))
+                }
             }
         }
     }
 }
 
 pub fn get_search(query: &String) -> Result<MediaInfo, &'static str> {
-   get_info(&format!("ytsearch:{}", query))
+    get_info(&format!("ytsearch:{}", query))
 }
 
 pub fn get_playlist_sources(url: &String) -> Result<LinkedList<MediaInfo>, &'static str> {
@@ -83,7 +95,9 @@ pub fn get_playlist_sources(url: &String) -> Result<LinkedList<MediaInfo>, &'sta
                 let json_result: serde_json::Result<YoutubeDLJson> = serde_json::from_str(line);
 
                 if let Ok(json) = json_result {
-                    sources.push_back(MediaInfo::from(json));
+                    if json.id.is_some() {
+                        sources.push_back(MediaInfo::from(json));
+                    }
                 }
             }
 
@@ -145,7 +159,8 @@ mod tests {
         #[test]
         fn success_page() {
             let sources = get_playlist_sources(
-                &"https://www.youtube.com/playlist?list=PLdY_Mca8fL_BbtQrKu9lm-LcCcY-t2mVS".to_string(),
+                &"https://www.youtube.com/playlist?list=PLdY_Mca8fL_BbtQrKu9lm-LcCcY-t2mVS"
+                    .to_string(),
             )
             .unwrap();
 
@@ -158,7 +173,7 @@ mod tests {
         fn success_video() {
             let sources = get_playlist_sources(
                 &"https://www.youtube.com/watch?v=nBpgoga0FZ4&list=PLdY_Mca8fL_BbtQrKu9lm-LcCcY-t2mVS".to_string()
-            ) 
+            )
             .unwrap();
 
             for source in sources.iter() {
@@ -199,7 +214,7 @@ mod tests {
         fn mid_line() {
             let timestamps = get_timestamps("Words to ignore 5:55 Some description".to_string());
 
-             assert_eq!(timestamps[0].label, "Some description");
+            assert_eq!(timestamps[0].label, "Some description");
             assert_eq!(timestamps[0].timestamp, "5:55");
             assert_eq!(timestamps[0].seconds, 5 * 60 + 55);
         }
