@@ -1,7 +1,7 @@
 # mimicri
 THIS PROJECT IS UNDER HEAVY DEVELOPMENT
 
-An imposter Discord music bot.
+A small, performant, easy to host Discord music bot written in Rust with multi-server history database functionality.
 
 # Features
 - [ ] Search
@@ -15,7 +15,7 @@ An imposter Discord music bot.
 - [ ] Roles
 - [ ] Song history
   - [ ] Custom playlists
-  - [ ] Randomized songs
+  - [ ] Randomized songs from history
 
 ## Setup
 
@@ -42,4 +42,9 @@ Alternatively, you can just set the environment variables before running.
 For basic debugging, run:
 ```sh
 cargo run
+```
+
+For deploying:
+```sh
+cargo run --release
 ```
