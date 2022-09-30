@@ -5,6 +5,7 @@ use songbird::tracks::TrackHandle;
 use songbird::{Call, Event, EventContext, EventHandler};
 use std::collections::{HashMap, LinkedList};
 use std::sync::Arc;
+use std::time::Duration;
 
 use crate::message_context::MessageContext;
 
@@ -140,6 +141,17 @@ impl GlobalMediaPlayer {
         }
     }
 
+    pub async fn seek(&self, guild_id: GuildId, time: i64) -> Result<(), String> {
+        let mut guild_map_guard = self.guild_media_player_map.lock().await;
+        let guild_map = guild_map_guard.as_mut().unwrap();
+
+        if let Some(media_player) = guild_map.get(&guild_id) {
+            media_player.seek(time).await
+        } else {
+            Err(String::from("Not connected to a voice channel!"))
+        }
+    }
+
     pub async fn now_playing(&self, guild_id: GuildId) -> Result<Option<(MediaInfo, i64)>, String> {
         let mut guild_map_guard = self.guild_media_player_map.lock().await;
         let guild_map = guild_map_guard.as_mut().unwrap();
@@ -253,6 +265,27 @@ impl ChannelMediaPlayer {
             }
             None => (),
         };
+    }
+
+    async fn seek(&self, time: i64) -> Result<(), String>{
+        let (shared_media_queue_lock, _) = &self.lock_protected_media_queue;
+        let smq_locked = shared_media_queue_lock.lock().await;
+
+        match &smq_locked.now_playing {
+            Some((media_item, track_handle)) => {
+                if time < media_item.info.duration {
+                    match track_handle.seek_time(Duration::from_secs(time as u64)) {
+                        Ok(_) => Ok(()),
+                        Err(err) => {
+                            Err(format!("Unable to seek track: {:?}", err))
+                        },
+                    }
+                } else {
+                    Err(format!("Unable to seek track: time out of range"))
+                }
+            }
+            None => Err(String::from("Cannot seek, not playing a song.")),
+        }
     }
 
     async fn now_playing(&self) -> Result<Option<(MediaInfo, i64)>, String>{
