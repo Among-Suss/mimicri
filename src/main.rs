@@ -29,7 +29,7 @@ use crate::{
     database_plugin::{plugin::DatabasePluginInit, sqlite_plugin::SQLitePlugin},
     media::MessageContext,
     play::queue_url_or_search,
-    strings::escape_string,
+    strings::{escape_string, limit_string_length},
 };
 
 struct Handler;
@@ -205,7 +205,7 @@ async fn queue(ctx: &Context, msg: &Message) -> CommandResult {
                 str += &format!(
                     "{}. [{}]({})\n",
                     i + 1,
-                    escape_string(&info.title),
+                    escape_string(&limit_string_length(&info.title, 50)),
                     info.url
                 )
                 .to_string();

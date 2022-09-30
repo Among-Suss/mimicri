@@ -1,5 +1,3 @@
-use unicode_segmentation::UnicodeSegmentation;
-
 static SENSITIVE_CHARACTERS: [&str; 7] = ["\\", "*", "_", "~", "`", "|", ">"];
 
 /// Escapes all sensitize Discord characters
@@ -17,19 +15,26 @@ pub fn escape_string(text: &String) -> String {
     sanitized_text
 }
 
+/// Slices the string from zero to width, and rounds to the nearest code point.
+/// Does not account for unicode size, as unicode characters tend to be larger.
 pub fn limit_string_length(text: &String, width: usize) -> String {
-    let graphemes = text.graphemes(true).collect::<Vec<&str>>();
-    let length = graphemes.len();
-
-    if width == 1 {
-        return graphemes[0].to_string();
+    if text.len() <= width {
+        return text.clone();
     }
 
-    if length <= width {
-        return graphemes.join("").to_string();
+    let mut previous_code_point = 0;
+    let mut previous_previous_code_point = 0;
+
+    for code_point in text.char_indices().map(|(i, _)| i).into_iter() {
+        if code_point > width {
+            return text.clone()[0..previous_previous_code_point].to_string() + "…";
+        }
+
+        previous_previous_code_point = previous_code_point;
+        previous_code_point = code_point;
     }
 
-    graphemes[0..width - 1].join("").to_string() + "…"
+    return text.clone();
 }
 
 #[cfg(test)]
@@ -49,49 +54,59 @@ mod tests {
 
     #[test]
     fn slice_string_exact() {
-        let long_string = "殺してください".to_string();
-        let cut_string = limit_string_length(&long_string, 7);
+        let long_string = "I want to die now".to_string();
+        let cut_string = limit_string_length(&long_string, 17);
 
-        assert_eq!(cut_string, "殺してください");
+        assert_eq!(cut_string, "I want to die now");
     }
 
     #[test]
     fn slice_string_longer() {
-        let long_string = "殺してください".to_string();
-        let cut_string = limit_string_length(&long_string, 4);
+        let long_string = "I want to die now".to_string();
+        let cut_string = limit_string_length(&long_string, 14);
 
-        assert_eq!(cut_string, "殺して…");
+        assert_eq!(cut_string, "I want to die…");
     }
 
     #[test]
     fn slice_string_shorter() {
-        let long_string = "殺してください".to_string();
-        let cut_string = limit_string_length(&long_string, 14);
+        let long_string = "I want to die".to_string();
+        let cut_string = limit_string_length(&long_string, 17);
 
-        assert_eq!(cut_string, "殺してください");
+        assert_eq!(cut_string, "I want to die");
     }
 
     #[test]
+    /// As long as it doesn't panic it's fine
+    fn slice_string_unicode() {
+        let long_string = "人生は意味がない".to_string();
+        let cut_string = limit_string_length(&long_string, 7);
+
+        assert_eq!(cut_string, "人…");
+    }
+
+    #[test]
+    fn slice_string_unicode_2() {
+        let long_string = "人生は意味がない".to_string();
+        let cut_string = limit_string_length(&long_string, 10);
+
+        assert_eq!(cut_string, "人生…");
+    }
+
+    #[test]
+    fn slice_string_unicode_longer() {
+        let long_string = "人生は意味がない".to_string();
+        let cut_string = limit_string_length(&long_string, 25);
+
+        assert_eq!(cut_string, "人生は意味がない");
+    }
+
+    #[test]
+    /// Not really expected behavior, but I don't think anyone is slicing string with 1 anyway
     fn slice_string_one() {
-        let long_string = "少女が好きな".to_string();
+        let long_string = "I want to die".to_string();
         let cut_string = limit_string_length(&long_string, 1);
 
-        assert_eq!(cut_string, "少");
-    }
-
-    #[test]
-    fn slice_overlapping_unicode() {
-        let long_string = "หิวข้าว".to_string();
-        let cut_string = limit_string_length(&long_string, 4);
-
-        assert_eq!(cut_string, "หิวข้…");
-    }
-
-    #[test]
-    fn slice_empty_string() {
-        let long_string = "".to_string();
-        let cut_string = limit_string_length(&long_string, 4);
-
-        assert_eq!(cut_string, "");
+        assert_eq!(cut_string, "…");
     }
 }
