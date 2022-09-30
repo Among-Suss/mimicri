@@ -140,6 +140,17 @@ impl GlobalMediaPlayer {
         }
     }
 
+    pub async fn now_playing(&self, guild_id: GuildId) -> Result<Option<(MediaInfo, i64)>, String> {
+        let mut guild_map_guard = self.guild_media_player_map.lock().await;
+        let guild_map = guild_map_guard.as_mut().unwrap();
+
+        if let Some(media_player) = guild_map.get(&guild_id) {
+            media_player.now_playing().await
+        } else {
+            Err(String::from("Not connected to a voice channel!"))
+        }
+    }
+
     pub async fn enqueue(
         &self,
         guild_id: GuildId,
@@ -242,6 +253,26 @@ impl ChannelMediaPlayer {
             }
             None => (),
         };
+    }
+
+    async fn now_playing(&self) -> Result<Option<(MediaInfo, i64)>, String>{
+        let (shared_media_queue_lock, _) = &self.lock_protected_media_queue;
+        let smq_locked = shared_media_queue_lock.lock().await;
+        match &smq_locked.now_playing {
+            Some((media_item, track_handle)) => {
+                let result = track_handle.get_info().await;
+                match result {
+                    Ok(trackstate) => {
+                        let position = trackstate.position.as_secs() as i64;
+                        Ok(Some((media_item.info.clone(), position)))
+                    },
+                    Err(trackerror) => {
+                        Err(String::from("Unable to get current song info from Track"))
+                    },
+                }
+            }
+            None => Ok(None),
+        }
     }
 
     async fn read_queue(&self, start: usize, length: usize) -> (LinkedList<MediaInfo>, usize) {
