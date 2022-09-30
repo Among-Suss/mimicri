@@ -261,6 +261,18 @@ impl ChannelMediaPlayer {
 
         let smq_locked = shared_media_queue_lock.lock().await;
 
+        let (start, length) = if start == 0 {
+            match &smq_locked.now_playing {
+                Some((media_item, _)) => {
+                    return_queue.push_front(media_item.info.clone());
+                },
+                None => return_queue.push_front(MediaInfo::empty_media_info()),
+            }
+            (start, length - 1)
+        } else {
+            (start - 1, length)
+        };
+
         for (i, media_item) in smq_locked.queue.iter().enumerate() {
             if i >= start + length {
                 break;
@@ -268,8 +280,8 @@ impl ChannelMediaPlayer {
 
             if i >= start {
                 match media_item {
-                    Some(media_item) => return_queue.push_back(media_item.info.clone()),
-                    None => return_queue.push_back(MediaInfo::empty_media_info()),
+                    Some(media_item) => return_queue.push_front(media_item.info.clone()),
+                    None => return_queue.push_front(MediaInfo::empty_media_info()),
                 }
             }
         }
