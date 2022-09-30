@@ -180,6 +180,25 @@ async fn play(ctx: &Context, msg: &Message, args: Args) -> CommandResult {
 }
 
 #[command]
+async fn skip(ctx: &Context, msg: &Message) -> CommandResult {
+    let guild = msg.guild(&ctx.cache).unwrap();
+    let guild_id = guild.id;
+
+    let res = GLOBAL_MEDIA_PLAYER.skip(guild_id).await;
+
+    match res {
+        Ok(_) => check_msg(
+            msg.channel_id
+                .send_message(&ctx.http, |m| m.embed(|e| e.title("Skipped song!")))
+                .await,
+        ),
+        Err(err) => check_msg(msg.channel_id.say(&ctx.http, err).await),
+    }
+
+    Ok(())
+}
+
+#[command]
 #[only_in(guilds)]
 async fn deafen(ctx: &Context, msg: &Message) -> CommandResult {
     let guild = msg.guild(&ctx.cache).unwrap();
@@ -335,20 +354,6 @@ async fn mute(ctx: &Context, msg: &Message) -> CommandResult {
 #[command]
 async fn ping(context: &Context, msg: &Message) -> CommandResult {
     check_msg(msg.channel_id.say(&context.http, "Pong!").await);
-
-    Ok(())
-}
-
-#[command]
-async fn skip(ctx: &Context, msg: &Message) -> CommandResult {
-    let guild = msg.guild(&ctx.cache).unwrap();
-    let guild_id = guild.id;
-
-    let res = GLOBAL_MEDIA_PLAYER.skip(guild_id).await;
-    match res {
-        Ok(_) => (),
-        Err(err) => check_msg(msg.channel_id.say(&ctx.http, err).await),
-    }
 
     Ok(())
 }
