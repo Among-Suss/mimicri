@@ -33,9 +33,6 @@ use crate::{
     strings::{escape_string, limit_string_length},
 };
 
-static QUEUE_TEXT_LENGTH: usize = 75;
-static QUEUE_PAGE_SIZE: usize = 10;
-
 struct Handler;
 
 #[async_trait]
@@ -220,8 +217,11 @@ async fn queue(ctx: &Context, msg: &Message, args: Args) -> CommandResult {
     let guild = msg.guild(&ctx.cache).unwrap();
     let guild_id = guild.id;
 
+    let queue_page_size = config::queue_page_size(guild_id);
+    let queue_text_len = config::queue_text_length(guild_id);
+
     let res = GLOBAL_MEDIA_PLAYER
-        .read_queue(guild_id, page * QUEUE_PAGE_SIZE, QUEUE_PAGE_SIZE)
+        .read_queue(guild_id, page * queue_page_size, queue_page_size)
         .await;
 
     match res {
@@ -236,8 +236,8 @@ async fn queue(ctx: &Context, msg: &Message, args: Args) -> CommandResult {
             for (i, info) in queue.iter().enumerate() {
                 str += &format!(
                     "{}. **{}**  [↗️]({})\n",
-                    i + 1 + page * QUEUE_PAGE_SIZE,
-                    escape_string(&limit_string_length(&info.title, QUEUE_TEXT_LENGTH)),
+                    i + 1 + page * queue_page_size,
+                    escape_string(&limit_string_length(&info.title, queue_text_len)),
                     info.url
                 )
                 .to_string();
@@ -246,7 +246,7 @@ async fn queue(ctx: &Context, msg: &Message, args: Args) -> CommandResult {
             str += &format!(
                 "\n...\n\nPage {} of {}",
                 page + 1,
-                len / QUEUE_PAGE_SIZE + 1
+                len / queue_page_size + 1
             );
 
             check_msg(
