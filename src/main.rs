@@ -45,17 +45,18 @@ impl EventHandler for Handler {
 
 #[group]
 #[commands(
-    deafen,
-    join,
-    leave,
-    mute,
+    version,
     play,
     ping,
     skip,
     queue,
     undeafen,
     unmute,
-    now_playing
+    now_playing,
+    deafen,
+    join,
+    leave,
+    mute
 )]
 struct General;
 
@@ -105,6 +106,20 @@ async fn main() {
         .await
         .expect("Failed to shutdown correctly");
     println!("Received Ctrl-C, shutting down.");
+}
+
+#[command]
+async fn version(ctx: &Context, msg: &Message, _args: Args) -> CommandResult {
+    let message_ctx = MessageContext {
+        channel: msg.channel_id,
+        http: ctx.http.clone(),
+    };
+
+    message_ctx
+        .send_info(format!("Version: {}", env!("VERGEN_GIT_SEMVER")))
+        .await;
+
+    Ok(())
 }
 
 #[command]
