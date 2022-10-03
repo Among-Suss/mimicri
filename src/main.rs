@@ -204,7 +204,7 @@ async fn skip(ctx: &Context, msg: &Message) -> CommandResult {
 #[only_in(guilds)]
 async fn queue(ctx: &Context, msg: &Message, args: Args) -> CommandResult {
     let mut page = str::parse::<usize>(args.raw().nth(0).unwrap_or_default()).unwrap_or_default();
-    page = cmp::max(page - 1, 0);
+    page = cmp::max((page as i32) - 1, 0) as usize;
 
     let guild = msg.guild(&ctx.cache).unwrap();
     let guild_id = guild.id;
