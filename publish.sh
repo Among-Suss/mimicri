@@ -42,4 +42,4 @@ git add .
 git commit -m "Published $version" --allow-empty
 
 git tag $version
-git push --follow-tags
+git push origin main --tags
