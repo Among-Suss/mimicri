@@ -53,3 +53,22 @@ For deploying:
 ```sh
 cargo run --release
 ```
+
+## Deploying
+
+Run the `publish.sh` shell script to automatically update the version and push to remote. By default, the script increments by a patch version.
+
+To increment a patch version:
+```sh
+./publish.sh patch
+```
+
+To increment a minor version:
+```sh
+./publish.sh minor
+```
+
+To increment a major version:
+```sh
+./publish.sh major
+```
