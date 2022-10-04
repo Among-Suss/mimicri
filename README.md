@@ -56,19 +56,23 @@ cargo run --release
 
 ## Deploying
 
-Run the `publish.sh` shell script to automatically update the version and push to remote. By default, the script increments by a patch version.
+Use the `publish.py` python script to automatically update the version and push to remote. 
 
 To increment a patch version:
 ```sh
-./publish.sh patch
+./publish.py bump -t patch --push
 ```
 
 To increment a minor version:
 ```sh
-./publish.sh minor
+./publish.py bump -t minor --push
 ```
 
 To increment a major version:
 ```sh
-./publish.sh major
+./publish.py bump -t major --push
 ```
+
+*Note: If you're not using Unix Shell (a.k.a. you're on Windows), you might have to prefix the command with `py` or `python`.
+
+You can run `./publish.py --help` to check out other tools and options.
