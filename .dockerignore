@@ -4,3 +4,7 @@ target
 .gitignore
 LICENSE
 README.md
+publish.py
+
+**/*.db
+**/*.sqlite

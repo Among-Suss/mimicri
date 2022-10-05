@@ -161,7 +161,7 @@ if __name__ == "__main__":
                 subprocess.check_output(["git", "push", "-d", "origin", "v" + current_version])
             
                 print("[Info]\tRemove tags will only remove tags and revert commits locally.")
-                ans = input(" > Do you want to also push the reverted commits? (WARNING! THIS WILL PERFORM A FORCE PUSH) (y/n):").lower()
+                ans = input(" > Do you want to also push the reverted commits? (WARNING! THIS WILL PERFORM A FORCE PUSH) (y/n): ").lower()
 
                 if ans == "y" or ans == "yes":
                     subprocess.check_output(["git", "push", "-f", "origin", "main"])
