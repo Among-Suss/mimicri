@@ -195,6 +195,7 @@ async fn play(ctx: &Context, msg: &Message, args: Args) -> CommandResult {
     Ok(())
 }
 
+// FIXME not working because it's not content, it's args
 #[command]
 #[only_in(guilds)]
 async fn play_single(ctx: &Context, msg: &Message, args: Args) -> CommandResult {
