@@ -1,5 +1,5 @@
 # mimicri
-THIS PROJECT IS UNDER HEAVY DEVELOPMENT
+*THIS PROJECT IS UNDER HEAVY DEVELOPMENT*
 
 A small, performant, easy to host Discord music bot written in Rust with multi-server history database functionality.
 
@@ -49,30 +49,19 @@ For basic debugging, run:
 cargo run
 ```
 
-For deploying:
+To create a release build:
 ```sh
 cargo run --release
 ```
 
 ## Deploying
 
-Use the `publish.py` python script to automatically update the version and push to remote. 
+Use the `publish.py` python script to automatically update the version and push to remote. To do that, commit all your changes, and run the script below:
 
-To increment a patch version:
 ```sh
-./publish.py bump -t patch --push
+./publish.py bump --type patch --push #Type can be patch, minor, or major
 ```
-
-To increment a minor version:
-```sh
-./publish.py bump -t minor --push
-```
-
-To increment a major version:
-```sh
-./publish.py bump -t major --push
-```
+The bump command does 3 things: bump the version on cargo, create a new commit containing only the bump, and tag the commit. With the `--push` flag, it will also automatically push to remote, triggering a workflow. You can run `./publish.py --help` to check out other tools and options.
 
 *Note: If you're not using Unix Shell (a.k.a. you're on Windows), you might have to prefix the command with `py` or `python`.
 
-You can run `./publish.py --help` to check out other tools and options.

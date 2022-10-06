@@ -8,26 +8,26 @@ use std::{
 
 #[derive(Serialize, Deserialize)]
 struct YoutubeDLJson {
-    _type: Option<String>,
-    ie_key: Option<String>,
     id: Option<String>,
     url: Option<String>,
     title: Option<String>,
     description: Option<String>,
-    duration: Option<i64>,
+    duration: Option<f64>,
+    thumbnail: Option<String>,
+    webpage_url: Option<String>,
+    // Expected Nullables
+    playlist_title: Option<String>, // or playlist?
 }
 
 impl From<YoutubeDLJson> for MediaInfo {
     fn from(json: YoutubeDLJson) -> Self {
         MediaInfo {
-            url: format!(
-                "https://www.youtube.com/watch?v={}",
-                json.id.unwrap_or("".to_string())
-            ), // TODO make this work with soundcloud too
-            title: json.title.unwrap_or("".to_string()),
-            description: json.description.unwrap_or("".to_string()),
-            duration: json.duration.unwrap_or_default(),
+            url: json.webpage_url.unwrap(),
+            title: json.title.unwrap(),
+            description: json.description.unwrap(),
+            duration: json.duration.unwrap() as i64,
             metadata: HashMap::new(),
+            thumbnail: json.thumbnail.unwrap(),
         }
     }
 }
@@ -50,10 +50,13 @@ pub fn get_info(url: &String) -> Result<MediaInfo, String> {
             let json_result: serde_json::Result<YoutubeDLJson> = serde_json::from_str(&output_str);
 
             match json_result {
-                Err(_) => Err("[metadata] [youtube-dl] Unable to parse json".to_string()),
+                Err(err) => {
+                    println!("[metadata] [youtube-dl] {}", err);
+                    Err("Unable to parse json".to_string())
+                }
                 Ok(json) => {
-                    if json.id.is_none() {
-                        return Err("[metadata] [youtube-dl] ID is none".to_string());
+                    if json.url.is_some() {
+                        return Err("[metadata] [youtube-dl] Json returned no URL".to_string());
                     }
 
                     Ok(MediaInfo::from(json))
@@ -67,9 +70,8 @@ pub fn get_search(query: &String) -> Result<MediaInfo, String> {
     get_info(&format!("ytsearch:{}", query))
 }
 
-pub fn get_playlist_sources(url: &String) -> Result<LinkedList<MediaInfo>, String> {
+pub fn get_playlist(url: &String) -> Result<LinkedList<MediaInfo>, String> {
     match process::Command::new("youtube-dl")
-        .arg("--flat-playlist")
         .arg("-j")
         .arg(&url)
         .output()
@@ -94,16 +96,20 @@ pub fn get_playlist_sources(url: &String) -> Result<LinkedList<MediaInfo>, Strin
 
                 let json_result: serde_json::Result<YoutubeDLJson> = serde_json::from_str(line);
 
-                if let Ok(json) = json_result {
-                    if json.id.is_some() {
-                        sources.push_back(MediaInfo::from(json));
-                    }
+                match json_result {
+                    Ok(json) => sources.push_back(MediaInfo::from(json)),
+                    Err(err) => println!("[playlist] [youtube-dl] {}", err),
                 }
             }
 
             return Ok(sources);
         }
     }
+}
+
+pub fn is_playlist(url: &String) -> bool {
+    return url.contains("youtube.com")
+        && (url.contains("/playlist?list=") || url.contains("&list="));
 }
 
 pub struct Timestamp {
@@ -154,16 +160,17 @@ mod tests {
     }
 
     mod playlist {
-        use super::super::get_playlist_sources;
+        use super::super::get_playlist;
 
         #[test]
         fn success_page() {
-            let sources = get_playlist_sources(
+            let sources = get_playlist(
                 &"https://www.youtube.com/playlist?list=PLdY_Mca8fL_BbtQrKu9lm-LcCcY-t2mVS"
                     .to_string(),
             )
             .unwrap();
 
+            assert!(sources.len() > 0);
             for source in sources.iter() {
                 assert!(!source.url.is_empty())
             }
@@ -171,11 +178,12 @@ mod tests {
 
         #[test]
         fn success_video() {
-            let sources = get_playlist_sources(
+            let sources = get_playlist(
                 &"https://www.youtube.com/watch?v=nBpgoga0FZ4&list=PLdY_Mca8fL_BbtQrKu9lm-LcCcY-t2mVS".to_string()
             )
             .unwrap();
 
+            assert!(sources.len() > 0);
             for source in sources.iter() {
                 assert!(!source.url.is_empty())
             }
@@ -184,21 +192,22 @@ mod tests {
         #[test]
         fn fail_video_url() {
             let sources =
-                get_playlist_sources(&"https://www.youtube.com/watch?v=6YBDo5S8soo".to_string())
-                    .unwrap();
+                get_playlist(&"https://www.youtube.com/watch?v=6YBDo5S8soo".to_string()).unwrap();
 
             assert_eq!(sources.len(), 1);
         }
 
         #[test]
         fn fail_not_url() {
-            let sources = get_playlist_sources(&"amogus".to_string()).unwrap();
+            let sources = get_playlist(&"amogus".to_string()).unwrap();
 
             assert!(sources.is_empty());
         }
     }
 
     mod timestamp {
+        use crate::metadata::is_playlist;
+
         use super::super::get_timestamps;
 
         #[test]
@@ -244,6 +253,26 @@ mod tests {
             let timestamps = get_timestamps("Hi there\n23 susser\nimposter".to_string());
 
             assert_eq!(timestamps.len(), 0);
+        }
+
+        #[test]
+        fn is_playlist_playlist_page() {
+            assert!(is_playlist(
+                &"https://www.youtube.com/playlist?list=PLdY_Mca8fL_BbtQrKu9lm-LcCcY-t2mVS"
+                    .to_string()
+            ))
+        }
+
+        #[test]
+        fn is_playlist_video_page() {
+            assert!(is_playlist(&"https://www.youtube.com/watch?v=nBpgoga0FZ4&list=PLdY_Mca8fL_BbtQrKu9lm-LcCcY-t2mVS".to_string()))
+        }
+
+        #[test]
+        fn is_playlist_not_video() {
+            assert!(!is_playlist(
+                &"https://www.youtube.com/watch?v=6YBDo5S8soo".to_string()
+            ))
         }
     }
 }

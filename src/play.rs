@@ -3,61 +3,48 @@ use serenity::model::prelude::GuildId;
 use crate::{
     media::{GlobalMediaPlayer, MediaInfo},
     message_context::MessageContext,
-    metadata::{get_info, get_search},
+    metadata::{get_info, get_playlist, get_search, is_playlist},
 };
 
-pub async fn queue_url_or_search(
+pub async fn queue_variant(
     guild_id: GuildId,
     query: &String,
     message_ctx: MessageContext,
     global_media_player: &GlobalMediaPlayer,
 ) -> Result<MediaInfo, String> {
-    if query.starts_with("http") {
-        return queue_url(guild_id, query, message_ctx, global_media_player).await;
+    if is_playlist(query) {
+        let infos = match get_playlist(query) {
+            Ok(infos) => infos,
+            Err(err) => return Err(err),
+        };
+
+        if infos.len() == 0 {
+            return Err("Playlist is empty!".to_string());
+        }
+
+        // FIXME Is cloning a linked list okay?
+        global_media_player
+            .enqueue_batch(guild_id, infos.clone(), message_ctx)
+            .await?;
+
+        Ok(infos.into_iter().nth(0).unwrap())
     } else {
-        return queue_search(guild_id, query, message_ctx, global_media_player).await;
+        let info = if query.starts_with("http") {
+            match get_info(query) {
+                Ok(url) => url,
+                Err(err) => return Err(err),
+            }
+        } else {
+            match get_search(query) {
+                Ok(url) => url,
+                Err(err) => return Err(err),
+            }
+        };
+
+        global_media_player
+            .enqueue(guild_id, info.clone(), message_ctx)
+            .await?;
+
+        Ok(info)
     }
-}
-
-pub async fn queue_search(
-    guild_id: GuildId,
-    query: &String,
-    message_ctx: MessageContext,
-    global_media_player: &GlobalMediaPlayer,
-) -> Result<MediaInfo, String> {
-    let video = match get_search(query) {
-        Ok(url) => url,
-        Err(err) => return Err(err),
-    };
-
-    queue_song(video.clone(), guild_id, message_ctx, global_media_player).await?;
-
-    Ok(video)
-}
-
-pub async fn queue_url(
-    guild_id: GuildId,
-    url: &String,
-    message_ctx: MessageContext,
-    global_media_player: &GlobalMediaPlayer,
-) -> Result<MediaInfo, String> {
-    let video = match get_info(url) {
-        Ok(url) => url,
-        Err(err) => return Err(err),
-    };
-
-    queue_song(video.clone(), guild_id, message_ctx, global_media_player).await?;
-
-    Ok(video)
-}
-
-async fn queue_song(
-    info: MediaInfo,
-    guild_id: GuildId,
-    message_ctx: MessageContext,
-    global_media_player: &GlobalMediaPlayer,
-) -> Result<(), String> {
-    global_media_player
-        .enqueue(guild_id, info, message_ctx)
-        .await
 }

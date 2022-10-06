@@ -30,7 +30,7 @@ use serenity::{
 use crate::{
     database_plugin::{plugin::DatabasePluginInit, sqlite_plugin::SQLitePlugin},
     message_context::MessageContext,
-    play::queue_url_or_search,
+    play::queue_variant,
     strings::{create_progress_bar, escape_string, limit_string_length, ProgressBarStyle},
 };
 
@@ -47,6 +47,7 @@ impl EventHandler for Handler {
 #[commands(
     version,
     play,
+    play_single,
     ping,
     skip,
     queue,
@@ -68,7 +69,6 @@ async fn main() {
 
     tracing_subscriber::fmt::init();
 
-    // Configure the client with your Discord bot token in the environment.
     dotenv().ok();
 
     let token = match env::var("DISCORD_TOKEN") {
@@ -109,7 +109,7 @@ async fn main() {
 }
 
 #[command]
-async fn version(ctx: &Context, msg: &Message, _args: Args) -> CommandResult {
+async fn version(ctx: &Context, msg: &Message) -> CommandResult {
     let message_ctx = MessageContext {
         channel: msg.channel_id,
         http: ctx.http.clone(),
@@ -181,7 +181,7 @@ async fn play(ctx: &Context, msg: &Message, args: Args) -> CommandResult {
 
     let db_plugin = database_plugin::plugin::get(ctx).await.unwrap().clone();
 
-    match queue_url_or_search(guild_id, &url, message_ctx.clone(), &GLOBAL_MEDIA_PLAYER).await {
+    match queue_variant(guild_id, &url, message_ctx.clone(), &GLOBAL_MEDIA_PLAYER).await {
         Ok(info) => {
             message_ctx
                 .reply_embed(msg, "Queued song:", &info.title, &info.url)
@@ -196,6 +196,23 @@ async fn play(ctx: &Context, msg: &Message, args: Args) -> CommandResult {
 }
 
 #[command]
+#[only_in(guilds)]
+async fn play_single(ctx: &Context, msg: &Message, args: Args) -> CommandResult {
+    let list_index = msg.content.find("&list=");
+
+    let mut new_msg = msg.clone();
+
+    if let Some(ind) = list_index {
+        new_msg.content = msg.content.clone()[0..ind].to_string();
+    }
+
+    play(ctx, &new_msg, args);
+
+    Ok(())
+}
+
+#[command]
+#[only_in(guilds)]
 async fn skip(ctx: &Context, msg: &Message) -> CommandResult {
     let guild = msg.guild(&ctx.cache).unwrap();
     let guild_id = guild.id;
