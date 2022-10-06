@@ -206,7 +206,7 @@ async fn play_single(ctx: &Context, msg: &Message, args: Args) -> CommandResult 
         new_msg.content = msg.content.clone()[0..ind].to_string();
     }
 
-    play(ctx, &new_msg, args);
+    play(ctx, &new_msg, args).await?;
 
     Ok(())
 }
