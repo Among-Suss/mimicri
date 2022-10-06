@@ -19,15 +19,45 @@ struct YoutubeDLJson {
     playlist_title: Option<String>, // or playlist?
 }
 
+#[derive(Serialize, Deserialize)]
+struct YoutubeDLFlatJson {
+    ie_key: Option<String>,
+    id: Option<String>,
+    title: Option<String>,
+    description: Option<String>,
+    duration: Option<f64>,
+}
+
 impl From<YoutubeDLJson> for MediaInfo {
     fn from(json: YoutubeDLJson) -> Self {
         MediaInfo {
-            url: json.webpage_url.unwrap(),
-            title: json.title.unwrap(),
-            description: json.description.unwrap(),
-            duration: json.duration.unwrap() as i64,
+            url: json.webpage_url.unwrap_or_default(),
+            title: json.title.unwrap_or_default(),
+            description: json.description.unwrap_or_default(),
+            duration: json.duration.unwrap_or_default() as i64,
             metadata: HashMap::new(),
-            thumbnail: json.thumbnail.unwrap(),
+            thumbnail: json.thumbnail.unwrap_or_default(),
+        }
+    }
+}
+
+impl From<YoutubeDLFlatJson> for MediaInfo {
+    fn from(json: YoutubeDLFlatJson) -> Self {
+        let platform = json.ie_key.unwrap_or_default();
+
+        let url = if platform == "Youtube" {
+            "www.youtube.com/watch?v=".to_string() + &json.id.unwrap_or_default()
+        } else {
+            "".to_string()
+        };
+
+        MediaInfo {
+            url,
+            title: json.title.unwrap_or_default(),
+            duration: json.duration.unwrap_or_default() as i64,
+            description: json.description.unwrap_or_default(),
+            metadata: HashMap::new(),
+            thumbnail: "".to_string(), // FIXME
         }
     }
 }
@@ -73,6 +103,7 @@ pub fn get_search(query: &String) -> Result<MediaInfo, String> {
 pub fn get_playlist(url: &String) -> Result<LinkedList<MediaInfo>, String> {
     match process::Command::new("youtube-dl")
         .arg("-j")
+        .arg("--flat-playlist")
         .arg(&url)
         .output()
     {
@@ -94,7 +125,7 @@ pub fn get_playlist(url: &String) -> Result<LinkedList<MediaInfo>, String> {
                     continue;
                 }
 
-                let json_result: serde_json::Result<YoutubeDLJson> = serde_json::from_str(line);
+                let json_result: serde_json::Result<YoutubeDLFlatJson> = serde_json::from_str(line);
 
                 match json_result {
                     Ok(json) => sources.push_back(MediaInfo::from(json)),
