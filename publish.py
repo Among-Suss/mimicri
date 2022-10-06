@@ -57,6 +57,8 @@ except subprocess.CalledProcessError:
     print("[Error]\tFailed to run cargo bump. Try installing via 'cargo install cargo-bump'")
     sys.exit(1)
 
+subprocess.check_call(["cargo", "check"], stderr=subprocess.DEVNULL)
+
 parser = argparse.ArgumentParser()
 
 sub_parsers = parser.add_subparsers(dest="command")
