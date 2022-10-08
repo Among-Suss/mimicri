@@ -47,6 +47,7 @@ impl EventHandler for Handler {
 #[commands(
     version,
     play,
+    p,
     play_single,
     ping,
     skip,
@@ -63,7 +64,7 @@ struct General;
 
 static GLOBAL_MEDIA_PLAYER: GlobalMediaPlayer = GlobalMediaPlayer::UNINITIALIZED;
 
-#[tokio::main]
+#[tokio::main(flavor = "multi_thread", worker_threads = 4)]
 async fn main() {
     GLOBAL_MEDIA_PLAYER.init_self().await;
 
@@ -120,6 +121,12 @@ async fn version(ctx: &Context, msg: &Message) -> CommandResult {
         .await;
 
     Ok(())
+}
+
+#[command]
+#[only_in(guilds)]
+async fn p(ctx: &Context, msg: &Message, args: Args) -> CommandResult {
+    play(ctx, msg, args).await
 }
 
 #[command]
