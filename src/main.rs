@@ -9,6 +9,7 @@ mod strings;
 use dotenv::dotenv;
 use media::GlobalMediaPlayer;
 use std::{cmp, env, sync::Arc};
+use tracing::log::info;
 
 use songbird::SerenityInit;
 
@@ -39,7 +40,7 @@ struct Handler;
 #[async_trait]
 impl EventHandler for Handler {
     async fn ready(&self, _: Context, ready: Ready) {
-        println!("{} is connected!", ready.user.name);
+        info!("{} is connected!", ready.user.name);
     }
 }
 
@@ -68,14 +69,20 @@ static GLOBAL_MEDIA_PLAYER: GlobalMediaPlayer = GlobalMediaPlayer::UNINITIALIZED
 async fn main() {
     GLOBAL_MEDIA_PLAYER.init_self().await;
 
-    tracing_subscriber::fmt::init();
+    let file_appender = tracing_appender::rolling::minutely("", "test.log");
+    let (non_blocking, _guard) = tracing_appender::non_blocking(file_appender);
+
+    tracing_subscriber::fmt()
+        .with_writer(std::io::stdout)
+        .with_writer(non_blocking)
+        .finish();
 
     dotenv().ok();
 
     let token = match env::var("DISCORD_TOKEN") {
         Ok(var) => var,
         Err(_) => {
-            println!("[Warning] No DISCORD_TOKEN environment variable present. Have you set the correct environment variables?\n\tSee the README for a list of available environment variables.");
+            info!("[Warning] No DISCORD_TOKEN environment variable present. Have you set the correct environment variables?\n\tSee the README for a list of available environment variables.");
             return;
         }
     };
@@ -100,13 +107,13 @@ async fn main() {
         let _ = client
             .start()
             .await
-            .map_err(|why| println!("Client ended: {:?}", why));
+            .map_err(|why| info!("Client ended: {:?}", why));
     });
 
     tokio::signal::ctrl_c()
         .await
         .expect("Failed to shutdown correctly");
-    println!("Received Ctrl-C, shutting down.");
+    info!("Received Ctrl-C, shutting down.");
 }
 
 #[command]
@@ -565,6 +572,6 @@ async fn unmute(ctx: &Context, msg: &Message) -> CommandResult {
 /// Checks that a message successfully sent; if not, then logs why to stdout.
 fn check_msg(result: SerenityResult<Message>) {
     if let Err(why) = result {
-        println!("Error sending message: {:?}", why);
+        info!("Error sending message: {:?}", why);
     }
 }
