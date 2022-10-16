@@ -291,7 +291,7 @@ impl ChannelMediaPlayer {
                         Ok(Some((media_item.info.clone(), position)))
                     }
                     Err(trackerror) => {
-                        Err(String::from("Unable to get current song info from Track"))
+                        Err(format!("Unable to get current song info from Track: {}", trackerror))
                     }
                 }
             }
