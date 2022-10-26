@@ -6,6 +6,7 @@ use songbird::{Call, Event, EventContext, EventHandler};
 use std::collections::{HashMap, LinkedList};
 use std::sync::Arc;
 use std::time::Duration;
+use tracing::error;
 
 use crate::message_context::MessageContext;
 
@@ -252,7 +253,7 @@ impl ChannelMediaPlayer {
                 match result {
                     Ok(_) => (),
                     Err(x) => {
-                        println!("Error skipping track: {:?}", x);
+                        error!("Error skipping track: {:?}", x);
                     }
                 }
             }
@@ -404,7 +405,7 @@ impl ChannelMediaPlayer {
                     match res {
                         Ok(_) => (),
                         Err(e) => {
-                            println!("unable to skip track to quit media player, {:?}", e);
+                            error!("unable to skip track to quit media player, {:?}", e);
                         }
                     }
                 }
@@ -445,7 +446,7 @@ impl ChannelMediaPlayer {
                 let source = match Restartable::ytdl(next_song.info.url.clone(), false).await {
                     Ok(source) => source,
                     Err(why) => {
-                        println!("Error creating source: {:?}", why);
+                        error!("Error creating source: {:?}", why);
 
                         message_ctx
                             .send_error("Error playing track: youtube-dl or ffmpeg failed")
@@ -468,7 +469,7 @@ impl ChannelMediaPlayer {
                 ) {
                     Ok(_) => (),
                     Err(err) => {
-                        println!("Error on track_handle.add_event {:?}", err);
+                        error!("Error on track_handle.add_event {:?}", err);
 
                         message_ctx
                             .send_error(

@@ -1,7 +1,7 @@
 use std::env;
 
 use sqlite::OpenFlags;
-use tracing::log::{error, info};
+use tracing::{error, info};
 
 use super::plugin::{DBError, DatabasePlugin};
 

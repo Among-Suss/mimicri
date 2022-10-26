@@ -9,7 +9,8 @@ mod strings;
 use dotenv::dotenv;
 use media::GlobalMediaPlayer;
 use std::{cmp, env, sync::Arc};
-use tracing::log::info;
+use tracing::info;
+use tracing_subscriber::{fmt, layer::SubscriberExt};
 
 use songbird::SerenityInit;
 
@@ -69,13 +70,15 @@ static GLOBAL_MEDIA_PLAYER: GlobalMediaPlayer = GlobalMediaPlayer::UNINITIALIZED
 async fn main() {
     GLOBAL_MEDIA_PLAYER.init_self().await;
 
-    let file_appender = tracing_appender::rolling::minutely("", "test.log");
-    let (non_blocking, _guard) = tracing_appender::non_blocking(file_appender);
+    let file_appender = tracing_appender::rolling::never("", "test.log");
+    let (file_writer, _guard) = tracing_appender::non_blocking(file_appender);
 
-    tracing_subscriber::fmt()
-        .with_writer(std::io::stdout)
-        .with_writer(non_blocking)
-        .finish();
+    tracing::subscriber::set_global_default(
+        tracing_subscriber::fmt()
+            .finish()
+            .with(fmt::Layer::default().with_writer(file_writer)),
+    )
+    .expect("Unable to set global tracing subscriber");
 
     dotenv().ok();
 

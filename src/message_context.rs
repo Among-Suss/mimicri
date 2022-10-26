@@ -6,6 +6,7 @@ use serenity::{
     model::prelude::{ChannelId, Message},
     Result as SerenityResult,
 };
+use tracing::error;
 
 pub struct MessageContext {
     pub channel: ChannelId,
@@ -153,6 +154,6 @@ pub fn create_replay_message(
 
 fn check_msg(result: SerenityResult<Message>) {
     if let Err(why) = result {
-        println!("Error sending message: {:?}", why);
+        error!("Error sending message: {:?}", why);
     }
 }

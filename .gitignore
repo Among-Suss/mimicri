@@ -15,3 +15,6 @@
 # sqlite
 *.db
 *.sqlite
+
+# logging
+*.log
