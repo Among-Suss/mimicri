@@ -1,5 +1,6 @@
 mod config;
 mod database_plugin;
+mod logging;
 mod media;
 mod message_context;
 mod metadata;
@@ -60,7 +61,9 @@ impl EventHandler for Handler {
     deafen,
     join,
     leave,
-    mute
+    mute,
+    // debug
+    log
 )]
 struct General;
 
@@ -70,13 +73,15 @@ static GLOBAL_MEDIA_PLAYER: GlobalMediaPlayer = GlobalMediaPlayer::UNINITIALIZED
 async fn main() {
     GLOBAL_MEDIA_PLAYER.init_self().await;
 
-    let file_appender = tracing_appender::rolling::never("", "test.log");
+    let file_appender = tracing_appender::rolling::never("", logging::get_log_filename());
     let (file_writer, _guard) = tracing_appender::non_blocking(file_appender);
 
     tracing::subscriber::set_global_default(
-        tracing_subscriber::fmt()
-            .finish()
-            .with(fmt::Layer::default().with_writer(file_writer)),
+        tracing_subscriber::fmt().finish().with(
+            fmt::Layer::default()
+                .with_writer(file_writer)
+                .with_ansi(false),
+        ),
     )
     .expect("Unable to set global tracing subscriber");
 
@@ -380,6 +385,22 @@ async fn deafen(ctx: &Context, msg: &Message) -> CommandResult {
         }
 
         check_msg(msg.channel_id.say(&ctx.http, "Deafened").await);
+    }
+
+    Ok(())
+}
+
+#[command]
+async fn log(ctx: &Context, msg: &Message) -> CommandResult {
+    let msg_ctx = MessageContext {
+        channel: msg.channel_id,
+        http: ctx.http.clone(),
+    };
+
+    if let Ok(log_vec) = logging::get_log().await {
+        msg_ctx
+            .send_info(format!("```{}```", log_vec.join("\n")))
+            .await;
     }
 
     Ok(())
