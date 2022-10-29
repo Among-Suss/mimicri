@@ -6,7 +6,7 @@ use songbird::{Call, Event, EventContext, EventHandler};
 use std::collections::{HashMap, LinkedList};
 use std::sync::Arc;
 use std::time::Duration;
-use tracing::error;
+use tracing::{error, info};
 
 use crate::message_context::MessageContext;
 
@@ -353,6 +353,8 @@ impl ChannelMediaPlayer {
     async fn enqueue(&self, info: MediaInfo, message_ctx: MessageContext) {
         let (shared_media_queue_lock, shared_media_queue_condvar) =
             &self.lock_protected_media_queue;
+
+        info!("Enqueuing song: {}", &info.title);
 
         let mut smq_locked = shared_media_queue_lock.lock().await;
 
