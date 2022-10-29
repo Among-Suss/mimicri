@@ -9,7 +9,7 @@ mod strings;
 
 use dotenv::dotenv;
 use media::GlobalMediaPlayer;
-use std::{cmp, env, sync::Arc};
+use std::{cmp, env, path::Path, sync::Arc};
 use tracing::{error, info, warn};
 use tracing_subscriber::{fmt, layer::SubscriberExt};
 
@@ -25,7 +25,7 @@ use serenity::{
         },
         StandardFramework,
     },
-    model::{channel::Message, gateway::Ready},
+    model::{channel::Message, gateway::Ready, prelude::AttachmentType},
     prelude::GatewayIntents,
     Result as SerenityResult,
 };
@@ -63,7 +63,8 @@ impl EventHandler for Handler {
     leave,
     mute,
     // debug
-    log
+    log,
+    log_file,
 )]
 struct General;
 
@@ -402,9 +403,11 @@ async fn log(ctx: &Context, msg: &Message, args: Args) -> CommandResult {
 
     let mut level = "".to_string();
     let mut target = "".to_string();
+    let mut from: usize = 0;
 
     let mut level_flag = false;
     let mut target_flag = false;
+    let mut from_flag = false;
 
     for arg in args.raw() {
         if arg == "-h" || arg == "--help" {
@@ -415,22 +418,42 @@ async fn log(ctx: &Context, msg: &Message, args: Args) -> CommandResult {
             level_flag = true;
         } else if arg == "-t" || arg == "--target" {
             target_flag = true;
+        } else if arg == "-f" || arg == "--from" {
+            from_flag = true;
         } else if level_flag {
             level = arg.to_string();
             level_flag = false;
         } else if target_flag {
             target = arg.to_string();
             target_flag = false;
+        } else if from_flag {
+            from = arg.parse::<usize>().unwrap_or_default();
+            from_flag = false;
         }
     }
 
-    let log_msgs = logging::get_logs(level, target).await;
+    let log_msgs = logging::get_logs(level, target, from).await;
 
     if !log_msgs.1.is_empty() {
         msg_ctx.send_error(log_msgs.1).await;
     }
 
     msg_ctx.send_info(log_msgs.0).await;
+
+    Ok(())
+}
+
+#[command]
+async fn log_file(ctx: &Context, msg: &Message) -> CommandResult {
+    let log_file = logging::get_log_filename();
+
+    check_msg(
+        msg.channel_id
+            .send_message(&ctx.http, |m| {
+                m.files(vec![AttachmentType::Path(Path::new(&log_file))])
+            })
+            .await,
+    );
 
     Ok(())
 }

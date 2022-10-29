@@ -6,11 +6,11 @@ use serde::{Deserialize, Serialize};
 use tracing::error;
 
 pub fn get_log_filename() -> String {
-    env::var("LOG_FILE").unwrap_or("output.log".to_owned())
+    env::var("LOG_FILE").unwrap_or("output.txt".to_owned())
 }
 
 /// Returns (logs, warning)
-pub async fn get_logs(level: String, target: String) -> (String, String) {
+pub async fn get_logs(level: String, target: String, start: usize) -> (String, String) {
     if let Ok(logs) = get_log().await {
         let mut level_flag = false;
 
@@ -62,7 +62,7 @@ pub async fn get_logs(level: String, target: String) -> (String, String) {
 
         let log_msg = log_msgs
             .into_iter()
-            .skip(from)
+            .skip(start + from)
             .take(to)
             .collect::<Vec<String>>()
             .join("\n");
@@ -87,7 +87,7 @@ pub fn format_help_message() -> String {
             "{}log",
             env::var("BOT_PREFIX").unwrap_or("~".to_owned())
         )),
-        "[--level <ERROR | WARN | INFO>] [--target <mimicri | serenity | ...>]"
+        "[--level <ERROR | WARN | INFO>] [--target <mimicri | serenity | ...>] [--from (int)]"
     )
 }
 
