@@ -1,6 +1,7 @@
 use std::env;
 
 use sqlite::OpenFlags;
+use tracing::{error, info};
 
 use super::plugin::{DBError, DatabasePlugin};
 
@@ -25,14 +26,14 @@ impl SQLitePlugin {
                 .set_full_mutex(),
         ) {
             Err(err) => {
-                println!("[sqlite] {}", err.to_string());
+                error!("[sqlite] {}", err.to_string());
                 Err("Unable to connect to database".to_string())
             }
             Ok(mut c) => {
                 match c.set_busy_timeout(10000) {
                     Ok(_) => (),
                     Err(err) => {
-                        println!("[sqlite] Failed to set busy_timeout: {}", err.to_string())
+                        error!("[sqlite] Failed to set busy_timeout: {}", err.to_string())
                     }
                 }
                 Ok(c)
@@ -50,7 +51,7 @@ impl Default for SQLitePlugin {
         let db = env::var("PLUGIN_SQLITE").unwrap_or("".to_string());
 
         if db.eq("") {
-            println!(
+            info!(
                 "[sqlite] sqlite plugin disabled. Set PLUGIN_SQLITE to a file name like 'mimicri.db' to enable the plugin.");
         }
 
@@ -136,7 +137,7 @@ impl DatabasePlugin for SQLitePlugin {
         match connection.execute(query) {
             Ok(_) => (),
             Err(err) => {
-                println!("[sqlite] Failed to create playlist {}; {}", name, err);
+                error!("[sqlite] Failed to create playlist {}; {}", name, err);
                 return Err("Failed to create playlist".to_string());
             }
         }
@@ -162,7 +163,7 @@ impl DatabasePlugin for SQLitePlugin {
         match connection.execute(query) {
             Ok(_) => (),
             Err(err) => {
-                println!("[sqlite] {}", err.to_string());
+                error!("[sqlite] {}", err.to_string());
                 return Err("Failed to delete song".to_string());
             }
         }
@@ -194,7 +195,7 @@ impl DatabasePlugin for SQLitePlugin {
         match connection.execute(query) {
             Ok(_) => (),
             Err(err) => {
-                println!("[sqlite] {}", err.to_string());
+                error!("[sqlite] {}", err.to_string());
                 return Err("Failed to set history".to_string());
             }
         }
@@ -233,7 +234,7 @@ impl DatabasePlugin for SQLitePlugin {
         match connection.execute(query) {
             Ok(_) => (),
             Err(err) => {
-                println!("[sqlite] {}", err.to_string());
+                error!("[sqlite] {}", err.to_string());
                 return Err("Failed to delete song".to_string());
             }
         }

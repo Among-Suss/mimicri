@@ -5,6 +5,7 @@ use std::{
     collections::{HashMap, LinkedList},
     process,
 };
+use tracing::error;
 
 #[derive(Serialize, Deserialize)]
 struct YoutubeDLJson {
@@ -74,14 +75,14 @@ pub fn get_info(url: &String) -> Result<MediaInfo, String> {
             let err_str = String::from_utf8_lossy(&output.stderr);
 
             if !err_str.is_empty() {
-                println!("[metadata] [youtube-dl] {}", err_str);
+                error!("[metadata] [youtube-dl] {}", err_str);
             }
 
             let json_result: serde_json::Result<YoutubeDLJson> = serde_json::from_str(&output_str);
 
             match json_result {
                 Err(err) => {
-                    println!("[metadata] [youtube-dl] {}", err);
+                    error!("[metadata] [youtube-dl] {}", err);
                     Err("Unable to parse json".to_string())
                 }
                 Ok(json) => {
@@ -115,7 +116,7 @@ pub fn get_playlist(url: &String) -> Result<LinkedList<MediaInfo>, String> {
             let err_str = String::from_utf8_lossy(&output.stderr);
 
             if !err_str.is_empty() {
-                println!("[playlist] [youtube-dl] {}", err_str);
+                error!("[playlist] [youtube-dl] {}", err_str);
             }
 
             let lines = output_str.split("\n");
@@ -129,7 +130,7 @@ pub fn get_playlist(url: &String) -> Result<LinkedList<MediaInfo>, String> {
 
                 match json_result {
                     Ok(json) => sources.push_back(MediaInfo::from(json)),
-                    Err(err) => println!("[playlist] [youtube-dl] {}", err),
+                    Err(err) => error!("[playlist] [youtube-dl] {}", err),
                 }
             }
 

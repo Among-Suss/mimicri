@@ -1,5 +1,6 @@
 mod config;
 mod database_plugin;
+mod logging;
 mod media;
 mod message_context;
 mod metadata;
@@ -9,6 +10,8 @@ mod strings;
 use dotenv::dotenv;
 use media::GlobalMediaPlayer;
 use std::{cmp, env, sync::Arc};
+use tracing::{error, info, warn};
+use tracing_subscriber::{fmt, layer::SubscriberExt};
 
 use songbird::SerenityInit;
 
@@ -39,7 +42,7 @@ struct Handler;
 #[async_trait]
 impl EventHandler for Handler {
     async fn ready(&self, _: Context, ready: Ready) {
-        println!("{} is connected!", ready.user.name);
+        info!("{} is connected!", ready.user.name);
     }
 }
 
@@ -58,7 +61,9 @@ impl EventHandler for Handler {
     deafen,
     join,
     leave,
-    mute
+    mute,
+    // debug
+    log
 )]
 struct General;
 
@@ -68,14 +73,25 @@ static GLOBAL_MEDIA_PLAYER: GlobalMediaPlayer = GlobalMediaPlayer::UNINITIALIZED
 async fn main() {
     GLOBAL_MEDIA_PLAYER.init_self().await;
 
-    tracing_subscriber::fmt::init();
+    let file_appender = tracing_appender::rolling::never("", logging::get_log_filename());
+    let (file_writer, _guard) = tracing_appender::non_blocking(file_appender);
+
+    tracing::subscriber::set_global_default(
+        tracing_subscriber::fmt()
+            .compact()
+            .with_thread_ids(false)
+            .with_thread_names(false)
+            .finish()
+            .with(fmt::Layer::default().json().with_writer(file_writer)),
+    )
+    .expect("Unable to set global tracing subscriber");
 
     dotenv().ok();
 
     let token = match env::var("DISCORD_TOKEN") {
         Ok(var) => var,
         Err(_) => {
-            println!("[Warning] No DISCORD_TOKEN environment variable present. Have you set the correct environment variables?\n\tSee the README for a list of available environment variables.");
+            info!("[Warning] No DISCORD_TOKEN environment variable present. Have you set the correct environment variables?\n\tSee the README for a list of available environment variables.");
             return;
         }
     };
@@ -100,13 +116,13 @@ async fn main() {
         let _ = client
             .start()
             .await
-            .map_err(|why| println!("Client ended: {:?}", why));
+            .map_err(|why| info!("Client ended: {:?}", why));
     });
 
     tokio::signal::ctrl_c()
         .await
         .expect("Failed to shutdown correctly");
-    println!("Received Ctrl-C, shutting down.");
+    info!("Received Ctrl-C, shutting down.");
 }
 
 #[command]
@@ -115,6 +131,8 @@ async fn version(ctx: &Context, msg: &Message) -> CommandResult {
         channel: msg.channel_id,
         http: ctx.http.clone(),
     };
+
+    info!(env!("VERGEN_GIT_SEMVER"));
 
     message_ctx
         .send_info(format!("Version: {}", env!("VERGEN_GIT_SEMVER")))
@@ -376,6 +394,48 @@ async fn deafen(ctx: &Context, msg: &Message) -> CommandResult {
 }
 
 #[command]
+async fn log(ctx: &Context, msg: &Message, args: Args) -> CommandResult {
+    let msg_ctx = MessageContext {
+        channel: msg.channel_id,
+        http: ctx.http.clone(),
+    };
+
+    let mut level = "".to_string();
+    let mut target = "".to_string();
+
+    let mut level_flag = false;
+    let mut target_flag = false;
+
+    for arg in args.raw() {
+        if arg == "-h" || arg == "--help" {
+            msg_ctx.send_info(logging::format_help_message()).await;
+
+            return Ok(());
+        } else if arg == "-l" || arg == "--level" {
+            level_flag = true;
+        } else if arg == "-t" || arg == "--target" {
+            target_flag = true;
+        } else if level_flag {
+            level = arg.to_string();
+            level_flag = false;
+        } else if target_flag {
+            target = arg.to_string();
+            target_flag = false;
+        }
+    }
+
+    let log_msgs = logging::get_logs(level, target).await;
+
+    if !log_msgs.1.is_empty() {
+        msg_ctx.send_error(log_msgs.1).await;
+    }
+
+    msg_ctx.send_info(log_msgs.0).await;
+
+    Ok(())
+}
+
+#[command]
 #[only_in(guilds)]
 async fn join(ctx: &Context, msg: &Message) -> CommandResult {
     let guild = msg.guild(&ctx.cache).unwrap();
@@ -565,6 +625,6 @@ async fn unmute(ctx: &Context, msg: &Message) -> CommandResult {
 /// Checks that a message successfully sent; if not, then logs why to stdout.
 fn check_msg(result: SerenityResult<Message>) {
     if let Err(why) = result {
-        println!("Error sending message: {:?}", why);
+        info!("Error sending message: {:?}", why);
     }
 }
