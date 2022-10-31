@@ -35,7 +35,7 @@ DISCORD_TOKEN = *your bot token*
 BOT_PREFIX = *bot prefix*
 
 # Optional
-PLUGIN_SQLITE= *database_filename.sqlite*
+SQLITE_DB *database_filename.sqlite*
 ```
 
 Alternatively, you can just set the environment variables before running.

@@ -4,6 +4,7 @@ use serenity::{
     builder::{CreateMessage, ParseValue},
     http::Http,
     model::prelude::{ChannelId, Message},
+    prelude::Context,
     Result as SerenityResult,
 };
 use tracing::error;
@@ -23,6 +24,13 @@ impl Clone for MessageContext {
 }
 
 impl MessageContext {
+    pub fn new(ctx: &Context, msg: &Message) -> MessageContext {
+        MessageContext {
+            channel: msg.channel_id,
+            http: ctx.http.clone(),
+        }
+    }
+
     pub async fn send_info(&self, message: impl Display) {
         check_msg(
             self.channel

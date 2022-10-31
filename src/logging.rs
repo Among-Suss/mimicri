@@ -95,16 +95,11 @@ async fn get_log() -> Result<Vec<Log>, String> {
     if let Ok(file_data) = fs::read_to_string(get_log_filename()).await {
         Ok(file_data
             .split("\n")
-            .filter_map(|s| {
-                if !s.is_empty() {
-                    match serde_json::from_str::<Log>(s) {
-                        Ok(json) => Some(json),
-                        Err(err) => {
-                            error!("{}", err);
-                            None
-                        }
-                    }
-                } else {
+            .filter(|s| !s.is_empty())
+            .filter_map(|s| match serde_json::from_str::<Log>(s) {
+                Ok(json) => Some(json),
+                Err(err) => {
+                    error!("{}", err);
                     None
                 }
             })

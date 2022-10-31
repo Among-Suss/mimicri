@@ -16,24 +16,25 @@ pub type DBError = String;
 pub trait DatabasePlugin: Sync + Send {
     fn init_db(&self);
 
-    fn set_history(&self, user_id: i64, url: &String) -> Result<(), DBError>;
-    fn get_history(&self, user_id: i64, amount: u32, page: u32) -> Result<Vec<String>, DBError>;
+    fn set_history(&self, user_id: u64, url: &String) -> Result<(), DBError>;
+    fn get_history(&self, user_id: u64, amount: usize, page: usize)
+        -> Result<Vec<String>, DBError>;
 
-    fn create_playlist(&self, user_id: i64, name: &String) -> Result<(), DBError>;
-    fn delete_playlist(&self, user_id: i64, name: &String) -> Result<(), DBError>;
+    fn create_playlist(&self, user_id: u64, name: &String) -> Result<(), DBError>;
+    fn delete_playlist(&self, user_id: u64, name: &String) -> Result<(), DBError>;
 
     fn get_playlist(
         &self,
-        user_id: i64,
+        user_id: u64,
         name: &String,
-        amount: u32,
-        page: u32,
+        amount: usize,
+        page: usize,
     ) -> Result<Vec<String>, DBError>;
 
-    fn add_playlist_song(&self, user_id: i64, name: &String, url: &String) -> Result<(), DBError>;
+    fn add_playlist_song(&self, user_id: u64, name: &String, url: &String) -> Result<(), DBError>;
     fn delete_playlist_song(
         &self,
-        user_id: i64,
+        user_id: u64,
         name: &String,
         url: &String,
     ) -> Result<(), DBError>;
@@ -57,7 +58,7 @@ impl DatabasePluginInit for ClientBuilder {
     }
 }
 
-pub async fn get(ctx: &Context) -> Option<Arc<dyn DatabasePlugin>> {
+pub async fn get_db_plugin(ctx: &Context) -> Option<Arc<dyn DatabasePlugin>> {
     let data = ctx.data.read().await;
 
     data.get::<DatabasePluginKey>().cloned()

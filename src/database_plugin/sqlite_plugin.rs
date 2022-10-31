@@ -48,11 +48,11 @@ impl SQLitePlugin {
 
 impl Default for SQLitePlugin {
     fn default() -> Self {
-        let db = env::var("PLUGIN_SQLITE").unwrap_or("".to_string());
+        let db = env::var("SQLITE_DB").unwrap_or("".to_string());
 
         if db.eq("") {
             info!(
-                "[sqlite] sqlite plugin disabled. Set PLUGIN_SQLITE to a file name like 'mimicri.db' to enable the plugin.");
+                "[sqlite] sqlite plugin disabled. Set SQLITE_DB to a file name like 'mimicri.db' to enable the plugin.");
         }
 
         SQLitePlugin { path: db }
@@ -117,7 +117,7 @@ impl DatabasePlugin for SQLitePlugin {
             .expect("[sqlite] Unable to init database");
     }
 
-    fn create_playlist(&self, user_id: i64, name: &String) -> Result<(), DBError> {
+    fn create_playlist(&self, user_id: u64, name: &String) -> Result<(), DBError> {
         if self.is_disabled() {
             return Ok(());
         }
@@ -145,7 +145,7 @@ impl DatabasePlugin for SQLitePlugin {
         Ok(())
     }
 
-    fn delete_playlist(&self, user_id: i64, name: &String) -> Result<(), DBError> {
+    fn delete_playlist(&self, user_id: u64, name: &String) -> Result<(), DBError> {
         if self.is_disabled() {
             return Ok(());
         }
@@ -171,7 +171,7 @@ impl DatabasePlugin for SQLitePlugin {
         Ok(())
     }
 
-    fn add_playlist_song(&self, user_id: i64, name: &String, url: &String) -> Result<(), DBError> {
+    fn add_playlist_song(&self, user_id: u64, name: &String, url: &String) -> Result<(), DBError> {
         if self.is_disabled() {
             return Ok(());
         }
@@ -184,7 +184,7 @@ impl DatabasePlugin for SQLitePlugin {
                 INSERT OR IGNORE INTO {USER_TABLE} VALUES ({});
                 INSERT OR IGNORE INTO {SONG_TABLE} VALUES ('{}');
                 INSERT OR IGNORE INTO {PLAYLIST_TABLE} VALUES (NULL, '{}', {});
-                INSERT OR IGNORE INTO {PLAYLIST_MAP_TABLE} VALUES (NULL, (
+                INSERT OR REPLACE INTO {PLAYLIST_MAP_TABLE} VALUES (NULL, (
                     SELECT id FROM {PLAYLIST_TABLE} WHERE name='{}' AND user_id={} LIMIT 1
                 ), '{}');
             COMMIT;
@@ -205,7 +205,7 @@ impl DatabasePlugin for SQLitePlugin {
 
     fn delete_playlist_song(
         &self,
-        user_id: i64,
+        user_id: u64,
         name: &String,
         url: &String,
     ) -> Result<(), DBError> {
@@ -244,11 +244,15 @@ impl DatabasePlugin for SQLitePlugin {
 
     fn get_playlist(
         &self,
-        user_id: i64,
+        user_id: u64,
         name: &String,
-        amount: u32,
-        page: u32,
+        amount: usize,
+        page: usize,
     ) -> Result<Vec<String>, DBError> {
+        if self.is_disabled() {
+            return Err("SQLite plugin not enabled!".to_string());
+        }
+
         let connection = self.get_connection()?;
 
         let query = format!(
@@ -279,11 +283,16 @@ impl DatabasePlugin for SQLitePlugin {
         Ok(urls)
     }
 
-    fn set_history(&self, user_id: i64, url: &String) -> Result<(), DBError> {
+    fn set_history(&self, user_id: u64, url: &String) -> Result<(), DBError> {
         self.add_playlist_song(user_id, &HISTORY_PLAYLIST.to_string(), url)
     }
 
-    fn get_history(&self, user_id: i64, amount: u32, page: u32) -> Result<Vec<String>, DBError> {
+    fn get_history(
+        &self,
+        user_id: u64,
+        amount: usize,
+        page: usize,
+    ) -> Result<Vec<String>, DBError> {
         self.get_playlist(user_id, &HISTORY_PLAYLIST.to_string(), amount, page)
     }
 }
@@ -382,11 +391,11 @@ mod tests {
             .unwrap()
             .unwrap();
 
-        assert_eq!(user_row.get::<i64, _>(0), user_id);
+        assert_eq!(user_row.get::<i64, _>(0), user_id as i64);
         assert_eq!(song_row.get::<String, _>(0), song_url);
 
         assert_eq!(playlist_row.get::<String, _>(1), "_history");
-        assert_eq!(playlist_row.get::<i64, _>(2), user_id);
+        assert_eq!(playlist_row.get::<i64, _>(2), user_id as i64);
 
         assert_eq!(playlist_map.get::<String, _>(2), song_url);
     }

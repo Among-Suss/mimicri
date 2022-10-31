@@ -10,7 +10,7 @@ mod strings;
 use dotenv::dotenv;
 use media::GlobalMediaPlayer;
 use std::{cmp, env, path::Path, sync::Arc};
-use tracing::{error, info, warn};
+use tracing::info;
 use tracing_subscriber::{fmt, layer::SubscriberExt};
 
 use songbird::SerenityInit;
@@ -31,8 +31,12 @@ use serenity::{
 };
 
 use crate::{
-    database_plugin::{plugin::DatabasePluginInit, sqlite_plugin::SQLitePlugin},
+    database_plugin::{
+        plugin::{get_db_plugin, DatabasePluginInit},
+        sqlite_plugin::SQLitePlugin,
+    },
     message_context::MessageContext,
+    metadata::get_videos_metadata,
     play::queue_variant,
     strings::{create_progress_bar, escape_string, limit_string_length, ProgressBarStyle},
 };
@@ -48,23 +52,27 @@ impl EventHandler for Handler {
 
 #[group]
 #[commands(
-    version,
     play,
     p,
     play_single,
-    ping,
     skip,
     queue,
-    undeafen,
-    unmute,
     now_playing,
+    np,
+    // history/playlist
+    history,
+    // debug
+    log,
+    log_file,
+    // etc
+    version,
+    ping,
     deafen,
     join,
     leave,
     mute,
-    // debug
-    log,
-    log_file,
+    undeafen,
+    unmute,
 )]
 struct General;
 
@@ -79,9 +87,6 @@ async fn main() {
 
     tracing::subscriber::set_global_default(
         tracing_subscriber::fmt()
-            .compact()
-            .with_thread_ids(false)
-            .with_thread_names(false)
             .finish()
             .with(fmt::Layer::default().json().with_writer(file_writer)),
     )
@@ -154,10 +159,7 @@ async fn play(ctx: &Context, msg: &Message, args: Args) -> CommandResult {
     let guild = msg.guild(&ctx.cache).unwrap();
     let guild_id = guild.id;
 
-    let message_ctx = MessageContext {
-        channel: msg.channel_id,
-        http: ctx.http.clone(),
-    };
+    let message_ctx = MessageContext::new(ctx, msg);
 
     // Join vc
     let user_vc = match guild
@@ -205,7 +207,7 @@ async fn play(ctx: &Context, msg: &Message, args: Args) -> CommandResult {
         return Ok(());
     }
 
-    let db_plugin = database_plugin::plugin::get(ctx).await.unwrap().clone();
+    let db_plugin = get_db_plugin(ctx).await.unwrap().clone();
 
     match queue_variant(guild_id, &url, message_ctx.clone(), &GLOBAL_MEDIA_PLAYER).await {
         Ok(info) => {
@@ -213,7 +215,7 @@ async fn play(ctx: &Context, msg: &Message, args: Args) -> CommandResult {
                 .reply_embed(msg, "Queued song:", &info.title, &info.url)
                 .await;
 
-            let _ = db_plugin.set_history(*ctx.cache.current_user_id().as_u64() as i64, &info.url);
+            let _ = db_plugin.set_history(*msg.author.id.as_u64(), &info.url);
         }
         Err(err) => message_ctx.reply_error(msg, err).await,
     }
@@ -283,7 +285,9 @@ async fn queue(ctx: &Context, msg: &Message, args: Args) -> CommandResult {
     match res {
         Ok((queue, len)) => {
             if len == 0 {
-                // TODO empty queue command
+                message_ctx
+                    .send_embed("", "Queue", "The queue is empty!")
+                    .await;
                 return Ok(());
             }
 
@@ -311,6 +315,12 @@ async fn queue(ctx: &Context, msg: &Message, args: Args) -> CommandResult {
     }
 
     Ok(())
+}
+
+#[command]
+#[only_in(guilds)]
+async fn np(ctx: &Context, msg: &Message, args: Args) -> CommandResult {
+    now_playing(ctx, msg, args).await
 }
 
 #[command]
@@ -350,6 +360,47 @@ async fn now_playing(ctx: &Context, msg: &Message) -> CommandResult {
             };
         }
         Err(err) => message_ctx.reply_error(&msg, err).await,
+    }
+
+    Ok(())
+}
+
+#[command]
+async fn history(ctx: &Context, msg: &Message) -> CommandResult {
+    let message_ctx = MessageContext::new(ctx, msg);
+
+    let db_plugin = get_db_plugin(ctx).await.unwrap().clone();
+
+    let guild_id = msg.guild(&ctx.cache).unwrap().id;
+    let queue_size = config::queue_page_size(guild_id);
+    let queue_text_len = config::queue_text_length(guild_id);
+
+    if let Ok(mut history) = db_plugin.get_history(*msg.author.id.as_u64(), queue_size, 0) {
+        history.reverse();
+        if let Ok(queue) = get_videos_metadata(history) {
+            let mut description = String::new();
+
+            for (i, info_option) in queue.iter().enumerate() {
+                if let Some(info) = info_option {
+                    description += &format!(
+                        "{}. **{}**  [↗️]({})\n",
+                        i + 1,
+                        escape_string(&limit_string_length(&info.title, queue_text_len)),
+                        info.url
+                    )
+                    .to_string();
+                }
+            }
+            message_ctx.send_embed("", "History", description).await;
+        } else {
+            message_ctx
+                .send_error("youtube-dl error, unable to fetch data for history.")
+                .await;
+        }
+    } else {
+        message_ctx
+            .send_error("Database error, unable to fetch history.")
+            .await;
     }
 
     Ok(())
