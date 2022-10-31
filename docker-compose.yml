@@ -7,7 +7,7 @@ services:
       - BOT_PREFIX=${BOT_PREFIX}
       - LOG_FILE=/etc/data/output.txt
       - SQLITE_DB=/etc/data/db.sqlite
-    build: poohcom1/mimicri:latest
+    image: poohcom1/mimicri:latest
     volumes:
       - "db:/etc/data"
 
