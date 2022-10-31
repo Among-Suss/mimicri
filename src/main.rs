@@ -110,11 +110,13 @@ async fn main() {
 
     let intents = GatewayIntents::non_privileged() | GatewayIntents::MESSAGE_CONTENT;
 
+    let db_plugin = SQLitePlugin::default();
+
     let mut client = Client::builder(&token, intents)
         .event_handler(Handler)
         .framework(framework)
         .register_songbird()
-        .register_database_plugin(Arc::new(SQLitePlugin::default()))
+        .register_database_plugin(Arc::new(db_plugin))
         .await
         .expect("Err creating client");
 
