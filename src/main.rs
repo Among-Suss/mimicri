@@ -393,7 +393,14 @@ async fn history(ctx: &Context, msg: &Message) -> CommandResult {
                     .to_string();
                 }
             }
-            message_ctx.send_embed("", "History", description).await;
+            message_ctx
+                .reply_embed(
+                    msg,
+                    "",
+                    format!("{}'s history", msg.author.name),
+                    description,
+                )
+                .await;
         } else {
             message_ctx
                 .send_error("youtube-dl error, unable to fetch data for history.")
