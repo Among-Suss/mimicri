@@ -43,24 +43,13 @@ pub fn limit_string_length(text: &String, width: usize) -> String {
     return text.clone();
 }
 
-pub enum ProgressBarStyle {
-    Marker,
-    Filler,
-}
-
-// TODO Fix this shit
-pub fn create_progress_bar(guild_id: GuildId, percent: f32, style: ProgressBarStyle) -> String {
+pub fn create_progress_bar(guild_id: GuildId, percent: f32) -> String {
     let length = config::progress_bar_length(guild_id) as usize;
 
-    match style {
-        ProgressBarStyle::Marker => {
-            let marker = config::progress_bar_marker(guild_id);
-            let track = config::progress_bar_track(guild_id);
+    let marker = config::progress_bar_marker(guild_id);
+    let track = config::progress_bar_track(guild_id);
 
-            generate_marker_progress_bar(length, percent, &marker, &track)
-        }
-        ProgressBarStyle::Filler => todo!(),
-    }
+    generate_marker_progress_bar(length, percent, &marker, &track)
 }
 
 fn generate_marker_progress_bar(
@@ -77,90 +66,163 @@ fn generate_marker_progress_bar(
         + &track.repeat(cmp::max(total_count - display_count - 1, 0) as usize)
 }
 
+pub fn format_timestamp(duration: i64) -> String {
+    let seconds = duration % 60;
+    let minutes = duration / 60 % 60;
+    let hours = duration / 3600;
+
+    if hours <= 0 {
+        format!("{}:{:02}", minutes, seconds).to_string()
+    } else {
+        format!("{}:{:02}:{:02}", hours, minutes, seconds).to_string()
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
 
-    #[test]
-    fn marker_progress_bar_start() {
-        let bar = generate_marker_progress_bar(10, 0.0, &"x".to_string(), &"-".to_string());
+    mod progress_bar {
+        use super::generate_marker_progress_bar;
 
-        assert_eq!(bar, "x---------")
+        #[test]
+        fn start() {
+            let bar = generate_marker_progress_bar(10, 0.0, &"x".to_string(), &"-".to_string());
+
+            assert_eq!(bar, "x---------")
+        }
+
+        #[test]
+        fn end() {
+            let bar = generate_marker_progress_bar(10, 1.0, &"x".to_string(), &"-".to_string());
+
+            assert_eq!(bar, "---------x")
+        }
     }
 
-    #[test]
-    fn marker_progress_bar_end() {
-        let bar = generate_marker_progress_bar(10, 1.0, &"x".to_string(), &"-".to_string());
+    mod escape_string {
+        use super::escape_string;
 
-        assert_eq!(bar, "---------x")
+        #[test]
+        fn escaping_string() {
+            let bad_string = "I \\ have * a _ very ~ bad ` string | here >".to_string();
+            let escaped_string = escape_string(&bad_string);
+
+            assert_eq!(
+                escaped_string,
+                "I \\\\ have \\* a \\_ very \\~ bad \\` string \\| here \\>"
+            );
+        }
     }
 
-    #[test]
-    fn escaping_string() {
-        let bad_string = "I \\ have * a _ very ~ bad ` string | here >".to_string();
-        let escaped_string = escape_string(&bad_string);
+    mod slice_string {
+        use super::limit_string_length;
 
-        assert_eq!(
-            escaped_string,
-            "I \\\\ have \\* a \\_ very \\~ bad \\` string \\| here \\>"
-        );
+        #[test]
+        fn string_exact() {
+            let long_string = "I want to die now".to_string();
+            let cut_string = limit_string_length(&long_string, 17);
+
+            assert_eq!(cut_string, "I want to die now");
+        }
+
+        #[test]
+        fn string_longer() {
+            let long_string = "I want to die now".to_string();
+            let cut_string = limit_string_length(&long_string, 14);
+
+            assert_eq!(cut_string, "I want to die…");
+        }
+
+        #[test]
+        fn string_shorter() {
+            let long_string = "I want to die".to_string();
+            let cut_string = limit_string_length(&long_string, 17);
+
+            assert_eq!(cut_string, "I want to die");
+        }
+
+        #[test]
+        /// As long as it doesn't panic it's fine
+        fn string_unicode() {
+            let long_string = "人生は意味がない".to_string();
+            let cut_string = limit_string_length(&long_string, 7);
+
+            assert_eq!(cut_string, "人…");
+        }
+
+        #[test]
+        fn string_unicode_2() {
+            let long_string = "人生は意味がない".to_string();
+            let cut_string = limit_string_length(&long_string, 10);
+
+            assert_eq!(cut_string, "人生…");
+        }
+
+        #[test]
+        fn string_unicode_longer() {
+            let long_string = "人生は意味がない".to_string();
+            let cut_string = limit_string_length(&long_string, 25);
+
+            assert_eq!(cut_string, "人生は意味がない");
+        }
+
+        #[test]
+        /// Not really expected behavior, but I don't think anyone is slicing string with 1 anyway
+        fn string_one() {
+            let long_string = "I want to die".to_string();
+            let cut_string = limit_string_length(&long_string, 1);
+
+            assert_eq!(cut_string, "…");
+        }
     }
 
-    #[test]
-    fn slice_string_exact() {
-        let long_string = "I want to die now".to_string();
-        let cut_string = limit_string_length(&long_string, 17);
+    mod format_timestamp {
+        use super::format_timestamp;
 
-        assert_eq!(cut_string, "I want to die now");
-    }
+        #[test]
+        fn seconds() {
+            assert_eq!(format_timestamp(30), "0:30")
+        }
 
-    #[test]
-    fn slice_string_longer() {
-        let long_string = "I want to die now".to_string();
-        let cut_string = limit_string_length(&long_string, 14);
+        #[test]
+        fn minute_whole() {
+            assert_eq!(format_timestamp(60), "1:00")
+        }
 
-        assert_eq!(cut_string, "I want to die…");
-    }
+        #[test]
+        fn minute_seconds() {
+            assert_eq!(format_timestamp(90), "1:30")
+        }
 
-    #[test]
-    fn slice_string_shorter() {
-        let long_string = "I want to die".to_string();
-        let cut_string = limit_string_length(&long_string, 17);
+        #[test]
+        fn minute_seconds_near_minute() {
+            assert_eq!(format_timestamp(60 + 59), "1:59")
+        }
 
-        assert_eq!(cut_string, "I want to die");
-    }
+        #[test]
+        fn minute_multiple() {
+            assert_eq!(format_timestamp(60 + 60), "2:00")
+        }
 
-    #[test]
-    /// As long as it doesn't panic it's fine
-    fn slice_string_unicode() {
-        let long_string = "人生は意味がない".to_string();
-        let cut_string = limit_string_length(&long_string, 7);
+        #[test]
+        fn minute_near_hour() {
+            assert_eq!(format_timestamp(60 * 59 + 59), "59:59")
+        }
 
-        assert_eq!(cut_string, "人…");
-    }
+        #[test]
+        fn hour() {
+            assert_eq!(format_timestamp(60 * 60), "1:00:00")
+        }
 
-    #[test]
-    fn slice_string_unicode_2() {
-        let long_string = "人生は意味がない".to_string();
-        let cut_string = limit_string_length(&long_string, 10);
+        #[test]
+        fn hour_seconds() {
+            assert_eq!(format_timestamp(60 * 60 + 59), "1:00:59")
+        }
 
-        assert_eq!(cut_string, "人生…");
-    }
-
-    #[test]
-    fn slice_string_unicode_longer() {
-        let long_string = "人生は意味がない".to_string();
-        let cut_string = limit_string_length(&long_string, 25);
-
-        assert_eq!(cut_string, "人生は意味がない");
-    }
-
-    #[test]
-    /// Not really expected behavior, but I don't think anyone is slicing string with 1 anyway
-    fn slice_string_one() {
-        let long_string = "I want to die".to_string();
-        let cut_string = limit_string_length(&long_string, 1);
-
-        assert_eq!(cut_string, "…");
+        #[test]
+        fn hour_minutes_seconds() {
+            assert_eq!(format_timestamp(60 * 60 + 60 + 59), "1:01:59")
+        }
     }
 }

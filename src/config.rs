@@ -1,7 +1,7 @@
 use serenity::model::prelude::GuildId;
 
 pub fn queue_text_length(_guild_id: GuildId) -> usize {
-    40
+    60
 }
 
 pub fn queue_page_size(_guild_id: GuildId) -> usize {
@@ -9,7 +9,7 @@ pub fn queue_page_size(_guild_id: GuildId) -> usize {
 }
 
 pub fn progress_bar_length(_guild_id: GuildId) -> usize {
-    20
+    30
 }
 
 pub fn progress_bar_marker(_guild_id: GuildId) -> String {

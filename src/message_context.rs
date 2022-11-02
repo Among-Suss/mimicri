@@ -1,7 +1,7 @@
 use std::{fmt::Display, sync::Arc};
 
 use serenity::{
-    builder::{CreateMessage, ParseValue},
+    builder::{CreateEmbed, CreateMessage, ParseValue},
     http::Http,
     model::prelude::{ChannelId, Message},
     prelude::Context,
@@ -31,6 +31,13 @@ impl MessageContext {
         }
     }
 
+    pub async fn send_message<'a, F>(&self, callback: F)
+    where
+        for<'b> F: FnOnce(&'b mut CreateMessage<'a>) -> &'b mut CreateMessage<'a>,
+    {
+        check_msg(self.channel.send_message(self.http.clone(), callback).await);
+    }
+
     pub async fn send_info(&self, message: impl Display) {
         check_msg(
             self.channel
@@ -53,7 +60,7 @@ impl MessageContext {
         );
     }
 
-    pub async fn send_embed(
+    pub async fn send_simple_embed(
         &self,
         message: impl Display,
         title: impl Display,
@@ -106,7 +113,29 @@ impl MessageContext {
         );
     }
 
-    pub async fn reply_embed(
+    pub async fn reply_embed<F>(&self, reply_message: &Message, embed_callback: F)
+    where
+        F: FnOnce(&mut CreateEmbed) -> &mut CreateEmbed,
+    {
+        check_msg(
+            self.channel
+                .send_message(self.http.clone(), |m| {
+                    m.content("")
+                        .embed(embed_callback)
+                        .reference_message(reply_message)
+                        .allowed_mentions(|f| {
+                            f.replied_user(false)
+                                .parse(ParseValue::Everyone)
+                                .parse(ParseValue::Users)
+                                .parse(ParseValue::Roles)
+                        });
+                    m
+                })
+                .await,
+        );
+    }
+
+    pub async fn reply_basic_embed(
         &self,
         reply_message: &Message,
         message: impl Display,

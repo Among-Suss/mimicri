@@ -38,15 +38,28 @@ use crate::{
     message_context::MessageContext,
     metadata::get_videos_metadata,
     play::queue_variant,
-    strings::{create_progress_bar, escape_string, limit_string_length, ProgressBarStyle},
+    strings::{create_progress_bar, escape_string, format_timestamp, limit_string_length},
 };
 
 struct Handler;
 
 #[async_trait]
 impl EventHandler for Handler {
-    async fn ready(&self, _: Context, ready: Ready) {
+    async fn ready(&self, ctx: Context, ready: Ready) {
         info!("{} is connected!", ready.user.name);
+
+        if let Ok(debug_channel) = env::var("DEBUG_CHANNEL_ID") {
+            let id = debug_channel.parse::<u64>().unwrap();
+
+            let _ = ctx
+                .http
+                .get_channel(id)
+                .await
+                .unwrap()
+                .id()
+                .say(&ctx.http, "Bot is ready")
+                .await;
+        }
     }
 }
 
@@ -130,6 +143,7 @@ async fn main() {
     tokio::signal::ctrl_c()
         .await
         .expect("Failed to shutdown correctly");
+
     info!("Received Ctrl-C, shutting down.");
 }
 
@@ -214,7 +228,7 @@ async fn play(ctx: &Context, msg: &Message, args: Args) -> CommandResult {
     match queue_variant(guild_id, &url, message_ctx.clone(), &GLOBAL_MEDIA_PLAYER).await {
         Ok(info) => {
             message_ctx
-                .reply_embed(msg, "Queued song:", &info.title, &info.url)
+                .reply_basic_embed(msg, "Queued song:", &info.title, &info.url)
                 .await;
 
             let _ = db_plugin.set_history(*msg.author.id.as_u64(), &info.url);
@@ -288,30 +302,46 @@ async fn queue(ctx: &Context, msg: &Message, args: Args) -> CommandResult {
         Ok((queue, len)) => {
             if len == 0 {
                 message_ctx
-                    .send_embed("", "Queue", "The queue is empty!")
+                    .send_simple_embed("", "Queue", "The queue is empty!")
                     .await;
                 return Ok(());
             }
 
-            let mut description = String::new();
+            message_ctx
+                .send_message(|m| {
+                    m.content("").embed(|e| {
+                        e.title("Queue")
+                            .description(
+                                queue
+                                    .into_iter()
+                                    .enumerate()
+                                    .map(|(i, info)| {
+                                        format!(
+                                            "**{}) [{}]({})** ({})",
+                                            i + 1 + page * queue_page_size,
+                                            escape_string(&limit_string_length(
+                                                &info.title,
+                                                queue_text_len,
+                                            )),
+                                            info.url,
+                                            format_timestamp(info.duration)
+                                        )
+                                    })
+                                    .collect::<Vec<String>>()
+                                    .join("\n"),
+                            )
+                            .footer(|f| {
+                                f.text(format!(
+                                    "Page {} of {}",
+                                    page + 1,
+                                    len / queue_page_size + 1
+                                ))
+                            })
+                    });
 
-            for (i, info) in queue.iter().enumerate() {
-                description += &format!(
-                    "{}. **{}**  [↗️]({})\n",
-                    i + 1 + page * queue_page_size,
-                    escape_string(&limit_string_length(&info.title, queue_text_len)),
-                    info.url
-                )
-                .to_string();
-            }
-
-            description += &format!(
-                "\n...\n\nPage {} of {}",
-                page + 1,
-                len / queue_page_size + 1
-            );
-
-            message_ctx.send_embed("", "Queue", description).await;
+                    m
+                })
+                .await;
         }
         Err(err) => message_ctx.send_error(err).await,
     }
@@ -342,20 +372,26 @@ async fn now_playing(ctx: &Context, msg: &Message) -> CommandResult {
             match res_tuple {
                 Some((info, time)) => {
                     message_ctx
-                        .reply_embed(
-                            &msg,
-                            "Now playing:",
-                            &info.title,
-                            &format!(
-                                "{}\n{}",
-                                &info.url,
-                                create_progress_bar(
-                                    guild_id,
-                                    time as f32 / info.duration as f32,
-                                    ProgressBarStyle::Marker
-                                )
-                            ),
-                        )
+                        .send_message(|m| {
+                            m.content("")
+                                .embed(|e| {
+                                    e.title(&info.title)
+                                        .description(format!(
+                                            "{}\n{} ({}/{})",
+                                            info.description,
+                                            create_progress_bar(
+                                                guild_id,
+                                                time as f32 / info.duration as f32,
+                                            ),
+                                            format_timestamp(time),
+                                            format_timestamp(info.duration)
+                                        ))
+                                        .url(&info.url)
+                                })
+                                .reference_message(msg);
+
+                            m
+                        })
                         .await;
                 }
                 None => message_ctx.reply_error(&msg, "No songs playing!").await,
@@ -368,14 +404,21 @@ async fn now_playing(ctx: &Context, msg: &Message) -> CommandResult {
 }
 
 #[command]
-async fn history(ctx: &Context, msg: &Message) -> CommandResult {
+async fn history(ctx: &Context, msg: &Message, args: Args) -> CommandResult {
     let message_ctx = MessageContext::new(ctx, msg);
+
+    let mut page = str::parse::<usize>(args.raw().nth(0).unwrap_or_default()).unwrap_or_default();
+    page = cmp::max((page as i32) - 1, 0) as usize;
 
     let db_plugin = get_db_plugin(ctx).await.unwrap().clone();
 
     let guild_id = msg.guild(&ctx.cache).unwrap().id;
+    let queue_page_size = config::queue_page_size(guild_id);
+
     let queue_size = config::queue_page_size(guild_id);
     let queue_text_len = config::queue_text_length(guild_id);
+
+    let len = queue_page_size; // TODO
 
     if let Ok(mut history) = db_plugin.get_history(*msg.author.id.as_u64(), queue_size, 0) {
         history.reverse();
@@ -394,12 +437,42 @@ async fn history(ctx: &Context, msg: &Message) -> CommandResult {
                 }
             }
             message_ctx
-                .reply_embed(
-                    msg,
-                    "",
-                    format!("{}'s history", msg.author.name),
-                    description,
-                )
+                .send_message(|m| {
+                    m.content("").embed(|e| {
+                        e.title(format!("{}'s History", msg.author.name))
+                            .description(
+                                queue
+                                    .into_iter()
+                                    .enumerate()
+                                    .map(|(i, info_option)| {
+                                        if let Some(info) = info_option {
+                                            format!(
+                                                "**{}) [{}]({})** ({})",
+                                                i + 1 + page * queue_page_size,
+                                                escape_string(&limit_string_length(
+                                                    &info.title,
+                                                    queue_text_len,
+                                                )),
+                                                info.url,
+                                                format_timestamp(info.duration)
+                                            )
+                                        } else {
+                                            format!(
+                                                "**{}) *Missing or removed song*",
+                                                i + 1 + page * queue_page_size,
+                                            )
+                                        }
+                                    })
+                                    .collect::<Vec<String>>()
+                                    .join("\n"),
+                            )
+                            .footer(|f| {
+                                f.text(format!("Page {} of {}", page + 1, len / queue_page_size))
+                            })
+                    });
+
+                    m
+                })
                 .await;
         } else {
             message_ctx
