@@ -12,6 +12,10 @@ pub fn get_log_filename() -> String {
 /// Returns (logs, warning)
 pub async fn get_logs(level: String, target: String, start: usize) -> (String, String) {
     if let Ok(logs) = get_log().await {
+        if start >= logs.len() {
+            return ("No logs found".to_string(), "".to_string());
+        }
+
         let mut level_flag = false;
 
         let level_filtered_logs: Vec<Log> = match level.to_uppercase().as_str() {
@@ -42,8 +46,12 @@ pub async fn get_logs(level: String, target: String, start: usize) -> (String, S
         let mut char_count = 0;
         let mut line_count = 0;
 
-        while line_count < log_msgs.len() && char_count < 1950 {
-            char_count += log_msgs[line_count].len();
+        while line_count + start < log_msgs.len() {
+            char_count += log_msgs[log_msgs.len() - line_count - start - 1].len();
+
+            if char_count > 1950 {
+                break;
+            }
 
             line_count += 1;
         }
@@ -57,13 +65,12 @@ pub async fn get_logs(level: String, target: String, start: usize) -> (String, S
             )
         };
 
-        let to = log_msgs.len();
-        let from = to - line_count + 1;
+        let from = log_msgs.len() - line_count - start;
 
         let log_msg = log_msgs
             .into_iter()
-            .skip(start + from)
-            .take(to)
+            .skip(from)
+            .take(line_count)
             .collect::<Vec<String>>()
             .join("\n");
 
