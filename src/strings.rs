@@ -44,10 +44,9 @@ pub fn limit_string_length(text: &String, width: usize) -> String {
 }
 
 pub fn create_progress_bar(guild_id: GuildId, percent: f32) -> String {
-    let length = config::progress_bar_length(guild_id) as usize;
-
-    let marker = config::progress_bar_marker(guild_id);
-    let track = config::progress_bar_track(guild_id);
+    let length = config::progress_bar::length(guild_id) as usize;
+    let marker = config::progress_bar::marker(guild_id);
+    let track = config::progress_bar::track(guild_id);
 
     generate_marker_progress_bar(length, percent, &marker, &track)
 }

@@ -236,6 +236,7 @@ async fn play(ctx: &Context, msg: &Message, args: Args) -> CommandResult {
                                 // .description(format!("[{}]({})", info.title, info.url))
                                 .thumbnail(info.thumbnail)
                                 .url(&info.url)
+                                .color(config::colors::play())
                         })
                         .reference_message(msg);
 
@@ -303,8 +304,8 @@ async fn queue(ctx: &Context, msg: &Message, args: Args) -> CommandResult {
         http: ctx.http.clone(),
     };
 
-    let queue_page_size = config::queue_page_size(guild_id);
-    let queue_text_len = config::queue_text_length(guild_id);
+    let queue_page_size = config::queue::page_size(guild_id);
+    let queue_text_len = config::queue::text_length(guild_id);
 
     let res = GLOBAL_MEDIA_PLAYER
         .read_queue(guild_id, page * queue_page_size, queue_page_size)
@@ -349,6 +350,7 @@ async fn queue(ctx: &Context, msg: &Message, args: Args) -> CommandResult {
                                     len / queue_page_size + 1
                                 ))
                             })
+                            .color(config::colors::queue())
                     });
 
                     m
@@ -400,6 +402,7 @@ async fn now_playing(ctx: &Context, msg: &Message) -> CommandResult {
                                         .author(|a| a.name("Now playing:"))
                                         .url(&info.url)
                                         .thumbnail(info.thumbnail)
+                                        .color(config::colors::now_playing())
                                 })
                                 .reference_message(msg);
 
@@ -426,14 +429,13 @@ async fn history(ctx: &Context, msg: &Message, args: Args) -> CommandResult {
     let db_plugin = get_db_plugin(ctx).await.unwrap().clone();
 
     let guild_id = msg.guild(&ctx.cache).unwrap().id;
-    let queue_page_size = config::queue_page_size(guild_id);
 
-    let queue_size = config::queue_page_size(guild_id);
-    let queue_text_len = config::queue_text_length(guild_id);
+    let queue_page_size = config::queue::page_size(guild_id);
+    let queue_text_len = config::queue::text_length(guild_id);
 
     let len = queue_page_size; // TODO
 
-    if let Ok(mut history) = db_plugin.get_history(*msg.author.id.as_u64(), queue_size, 0) {
+    if let Ok(mut history) = db_plugin.get_history(*msg.author.id.as_u64(), queue_page_size, 0) {
         history.reverse();
         if let Ok(queue) = get_videos_metadata(history) {
             let mut description = String::new();
@@ -482,6 +484,7 @@ async fn history(ctx: &Context, msg: &Message, args: Args) -> CommandResult {
                             .footer(|f| {
                                 f.text(format!("Page {} of {}", page + 1, len / queue_page_size))
                             })
+                            .color(config::colors::history())
                     });
 
                     m
