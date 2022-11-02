@@ -228,7 +228,19 @@ async fn play(ctx: &Context, msg: &Message, args: Args) -> CommandResult {
     match queue_variant(guild_id, &url, message_ctx.clone(), &GLOBAL_MEDIA_PLAYER).await {
         Ok(info) => {
             message_ctx
-                .reply_basic_embed(msg, "Queued song:", &info.title, &info.url)
+                .send_message(|m| {
+                    m.content("")
+                        .embed(|e| {
+                            e.title(&info.title)
+                                .author(|a| a.name("Queued:"))
+                                // .description(format!("[{}]({})", info.title, info.url))
+                                .thumbnail(info.thumbnail)
+                                .url(&info.url)
+                        })
+                        .reference_message(msg);
+
+                    m
+                })
                 .await;
 
             let _ = db_plugin.set_history(*msg.author.id.as_u64(), &info.url);
@@ -377,8 +389,7 @@ async fn now_playing(ctx: &Context, msg: &Message) -> CommandResult {
                                 .embed(|e| {
                                     e.title(&info.title)
                                         .description(format!(
-                                            "{}\n{} ({}/{})",
-                                            info.description,
+                                            "`{} ({}/{})`",
                                             create_progress_bar(
                                                 guild_id,
                                                 time as f32 / info.duration as f32,
@@ -386,7 +397,9 @@ async fn now_playing(ctx: &Context, msg: &Message) -> CommandResult {
                                             format_timestamp(time),
                                             format_timestamp(info.duration)
                                         ))
+                                        .author(|a| a.name("Now playing:"))
                                         .url(&info.url)
+                                        .thumbnail(info.thumbnail)
                                 })
                                 .reference_message(msg);
 

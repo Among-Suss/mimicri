@@ -9,7 +9,7 @@ pub fn queue_page_size(_guild_id: GuildId) -> usize {
 }
 
 pub fn progress_bar_length(_guild_id: GuildId) -> usize {
-    30
+    40
 }
 
 pub fn progress_bar_marker(_guild_id: GuildId) -> String {

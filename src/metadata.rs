@@ -1,4 +1,4 @@
-use crate::media::{MediaInfo, MediaItem};
+use crate::media::MediaInfo;
 use regex::Regex;
 use serde::{Deserialize, Serialize};
 use std::{
