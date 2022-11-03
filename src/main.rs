@@ -437,9 +437,9 @@ async fn history(ctx: &Context, msg: &Message, args: Args) -> CommandResult {
     let queue_page_size = config::queue::page_size(guild_id);
     let queue_text_len = config::queue::text_length(guild_id);
 
-    let len = queue_page_size; // TODO
-
-    if let Ok(mut history) = db_plugin.get_history(*msg.author.id.as_u64(), queue_page_size, 0) {
+    if let Ok((mut history, count)) =
+        db_plugin.get_history(*msg.author.id.as_u64(), queue_page_size, 0)
+    {
         history.reverse();
         let mut description = String::new();
 
@@ -476,7 +476,11 @@ async fn history(ctx: &Context, msg: &Message, args: Args) -> CommandResult {
                                 .join("\n"),
                         )
                         .footer(|f| {
-                            f.text(format!("Page {} of {}", page + 1, len / queue_page_size))
+                            f.text(format!(
+                                "Page {} of {}",
+                                page + 1,
+                                (count as f32 / queue_page_size as f32).ceil()
+                            ))
                         })
                         .color(config::colors::history())
                 });

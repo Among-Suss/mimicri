@@ -9,6 +9,10 @@ use super::plugin::{DBError, DatabasePlugin};
 
 const HISTORY_PLAYLIST: &str = "_history";
 
+fn escape_json(json: String) -> String {
+    json.replace("'", "''")
+}
+
 pub struct SQLitePlugin {
     pub path: String,
 }
@@ -194,7 +198,7 @@ impl DatabasePlugin for SQLitePlugin {
                 ",
             user_id,
             &info.url,
-            serde_json::to_value(info.clone()).unwrap().to_string(),
+            escape_json(serde_json::to_value(info.clone()).unwrap().to_string()),
             name,
             user_id,
             name,
@@ -206,7 +210,7 @@ impl DatabasePlugin for SQLitePlugin {
             Ok(_) => (),
             Err(err) => {
                 error!("[sqlite] {}", err.to_string());
-                return Err("Failed to set history".to_string());
+                return Err("Failed to add to playlist".to_string());
             }
         }
 
@@ -258,7 +262,7 @@ impl DatabasePlugin for SQLitePlugin {
         name: &String,
         amount: usize,
         page: usize,
-    ) -> Result<Vec<MediaInfo>, DBError> {
+    ) -> Result<(Vec<MediaInfo>, usize), DBError> {
         if self.is_disabled() {
             return Err("SQLite plugin not enabled!".to_string());
         }
@@ -311,7 +315,30 @@ impl DatabasePlugin for SQLitePlugin {
             );
         }
 
-        Ok(infos)
+        // Get total
+        let query = format!(
+            "
+            SELECT count(*)
+            FROM playlists_map 
+            WHERE playlists_map.playlist_id=(
+                SELECT id
+                FROM playlists
+                WHERE user_id={} AND name='{}'
+            )
+            ;
+        ",
+            user_id, name,
+        );
+
+        let mut cursor = connection.prepare(query).unwrap().into_cursor();
+
+        let count = if let Some(Ok(row)) = cursor.next() {
+            row.get::<i64, _>(0)
+        } else {
+            0
+        };
+
+        Ok((infos, count as usize))
     }
 
     fn set_history(&self, user_id: u64, info: MediaInfo) -> Result<(), DBError> {
@@ -323,7 +350,7 @@ impl DatabasePlugin for SQLitePlugin {
         user_id: u64,
         amount: usize,
         page: usize,
-    ) -> Result<Vec<MediaInfo>, DBError> {
+    ) -> Result<(Vec<MediaInfo>, usize), DBError> {
         self.get_playlist(user_id, &HISTORY_PLAYLIST.to_string(), amount, page)
     }
 }
@@ -376,6 +403,54 @@ mod tests {
         plugin.init_db();
 
         assert!(plugin.set_history(1, MediaInfo::empty()).is_ok());
+    }
+
+    #[test]
+    #[serial]
+    fn set_playlist_escape_single_quote() {
+        let db = mock_db_plugin();
+        let user_id = 1;
+        let playlist = "playlist".to_string();
+
+        let song = MediaInfo {
+            url: "test_url".to_string(),
+            description: "It's".to_string(),
+            duration: 0,
+            title: "".to_string(),
+            thumbnail: "".to_string(),
+        };
+
+        let result = db.add_playlist_song(user_id, &playlist, song.clone());
+
+        assert!(result.is_ok());
+
+        let playlist_songs = db.get_playlist(user_id, &playlist, 1, 0).unwrap().0;
+
+        assert_eq!(playlist_songs[0].description, song.description);
+    }
+
+    #[test]
+    #[serial]
+    fn set_playlist_escape_tokens() {
+        let db = mock_db_plugin();
+        let user_id = 1;
+        let playlist = "playlist".to_string();
+
+        let song = MediaInfo {
+            url: "test_url".to_string(),
+            description: "');".to_string(),
+            duration: 0,
+            title: "".to_string(),
+            thumbnail: "".to_string(),
+        };
+
+        let result = db.add_playlist_song(user_id, &playlist, song.clone());
+
+        assert!(result.is_ok());
+
+        let playlist_songs = db.get_playlist(user_id, &playlist, 1, 0).unwrap().0;
+
+        assert_eq!(playlist_songs[0].description, song.description);
     }
 
     #[test]
@@ -457,7 +532,7 @@ mod tests {
         db.set_history(user_id, song_4.clone()).unwrap();
         db.set_history(user_id, song_5.clone()).unwrap();
 
-        let history = db.get_history(user_id, 5, 0).unwrap();
+        let history = db.get_history(user_id, 5, 0).unwrap().0;
 
         assert_eq!(song_1, history[0]);
         assert_eq!(song_2, history[1]);
@@ -485,12 +560,14 @@ mod tests {
         db.set_history(user_id, song_4.clone()).unwrap();
         db.set_history(user_id, song_5.clone()).unwrap();
 
-        let history = db.get_history(user_id, 5, 2).unwrap();
+        let query = db.get_history(user_id, 5, 2).unwrap();
+        let history = query.0;
+        let count = query.1;
 
         assert_eq!(song_3, history[0]);
         assert_eq!(song_4, history[1]);
         assert_eq!(song_5, history[2]);
-        assert_eq!(history.len(), 3);
+        assert_eq!(count, 5);
     }
 
     #[test]
@@ -511,7 +588,7 @@ mod tests {
         db.add_playlist_song(user_id, &playlist_name, song3.clone())
             .unwrap();
 
-        let songs = db.get_playlist(user_id, &playlist_name, 3, 0).unwrap();
+        let songs = db.get_playlist(user_id, &playlist_name, 3, 0).unwrap().0;
 
         assert_eq!(songs[0], song1);
         assert_eq!(songs.len(), 3);
@@ -519,7 +596,7 @@ mod tests {
         db.delete_playlist_song(user_id, &playlist_name, &song1.url)
             .unwrap();
 
-        let songs = db.get_playlist(user_id, &playlist_name, 3, 0).unwrap();
+        let songs = db.get_playlist(user_id, &playlist_name, 3, 0).unwrap().0;
 
         assert_eq!(songs.len(), 2);
     }
@@ -540,7 +617,7 @@ mod tests {
         db.add_playlist_song(user_id, &playlist_name, song2)
             .unwrap();
 
-        let songs = db.get_playlist(user_id, &playlist_name, 10, 0).unwrap();
+        let songs = db.get_playlist(user_id, &playlist_name, 10, 0).unwrap().0;
 
         assert_eq!(songs.len(), 2);
 

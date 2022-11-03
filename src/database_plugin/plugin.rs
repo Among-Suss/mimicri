@@ -15,7 +15,7 @@ impl TypeMapKey for DatabasePluginKey {
 
 pub type DBError = String;
 pub type PluginResult = Result<(), DBError>;
-pub type PluginDataResult = Result<Vec<MediaInfo>, DBError>;
+pub type PluginDataResult = Result<(Vec<MediaInfo>, usize), DBError>;
 
 pub trait DatabasePlugin: Sync + Send {
     fn init_db(&self);

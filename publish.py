@@ -1,4 +1,5 @@
 #! /usr/bin/env python3
+import os
 import sys
 import argparse
 import json
@@ -131,6 +132,8 @@ if args.command == "bump":
         exit(1)
 
     # Bump
+    os.environ["RUSTFLAGS"] = "$RUSTFLAGS -Awarnings"
+
     subprocess.check_output(["cargo", "bump", bump_type])
     subprocess.check_output(["cargo", "check", "--quiet"])
 

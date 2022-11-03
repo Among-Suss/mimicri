@@ -1,10 +1,7 @@
 use crate::media::MediaInfo;
 use regex::Regex;
 use serde::{Deserialize, Serialize};
-use std::{
-    collections::{HashMap, LinkedList},
-    process, vec,
-};
+use std::{collections::LinkedList, process};
 use tracing::error;
 
 #[derive(Serialize, Deserialize)]
