@@ -9,7 +9,8 @@ bump_types = ["patch", "minor", "major"]
 
 
 def get_version() -> str:
-    metadata_process = subprocess.run(["cargo", "metadata", "--no-deps", "--format-version=1"], capture_output=True)
+    metadata_process = subprocess.run(
+        ["cargo", "metadata", "--no-deps", "--format-version=1"], capture_output=True)
     return json.loads(metadata_process.stdout)["packages"][0]["version"]
 
 
@@ -33,7 +34,8 @@ def update_version(version: str, type: str) -> str:
 
 
 def check_tag_exists(tag: str) -> bool:
-    tag_process = subprocess.run(["git", "tag", "-l", tag], capture_output=True)
+    tag_process = subprocess.run(
+        ["git", "tag", "-l", tag], capture_output=True)
     return len(tag_process.stdout) > 0
 
 
@@ -64,12 +66,17 @@ sub_parsers = parser.add_subparsers(dest="command")
 bump_parser = sub_parsers.add_parser(name="bump")
 undo_parser = sub_parsers.add_parser(name="undo")
 
-bump_parser.add_argument("-t", "--type", choices=bump_types, default="", help="Whether to bump patch, minor, or major versions.")
-bump_parser.add_argument("-p", "--push", action="store_true", help="If present, will automatically push to remote.")
-bump_parser.add_argument("-d", "--dry", action='store_true', help="If present, will perform a dry run with no changes.")
+bump_parser.add_argument("-t", "--type", choices=bump_types, default="",
+                         help="Whether to bump patch, minor, or major versions.")
+bump_parser.add_argument("-p", "--push", action="store_true",
+                         help="If present, will automatically push to remote.")
+bump_parser.add_argument("-d", "--dry", action='store_true',
+                         help="If present, will perform a dry run with no changes.")
 
-undo_parser.add_argument("-p", "--push", action="store_true", help="If present, will automatically push to remote.")
-undo_parser.add_argument("-d", "--dry", action='store_true', help="If present, will perform a dry run with no changes.")
+undo_parser.add_argument("-p", "--push", action="store_true",
+                         help="If present, will automatically push to remote.")
+undo_parser.add_argument("-d", "--dry", action='store_true',
+                         help="If present, will perform a dry run with no changes.")
 
 args = parser.parse_args(sys.argv[1:])
 
@@ -90,33 +97,37 @@ if args.command == "bump":
             print(" > Aborting")
             exit(1)
 
-
     # Get versions
     current_version = get_version()
     next_version = update_version(current_version, bump_type)
 
     if check_tag_exists("v" + next_version):
-        print("[Error]\tAttempting to bump from v%s to v%s, but the tag v%s already exists" % (current_version, next_version, next_version))
-        
+        print("[Error]\tAttempting to bump from v%s to v%s, but the tag v%s already exists" % (
+            current_version, next_version, next_version))
+
         if args.dry:
             exit(1)
-        
-        ans = input(" > Would you like to remove the tag and replace the tag? (y/n): ").lower()
+
+        ans = input(
+            " > Would you like to remove the tag and replace the tag? (y/n): ").lower()
 
         if ans == "y" or ans == "yes":
-            subprocess.check_output(["git", "tag", "-d", "origin", "v" + next_version])
+            subprocess.check_output(
+                ["git", "tag", "-d", "origin", "v" + next_version])
         else:
             print(" > Aborting due to tag conflict")
             exit(1)
 
     if args.dry:
-        print("[dry]\tBumped (%s) from v%s to v%s" % (bump_type, current_version, next_version))
+        print("[dry]\tBumped (%s) from v%s to v%s" %
+              (bump_type, current_version, next_version))
 
         sys.exit(0)
 
     # Check for staged changes
     if check_staged_changes():
-        print("[Error]\tThere are staged changes. Please commit or unstage them before bumping.")
+        print(
+            "[Error]\tThere are staged changes. Please commit or unstage them before bumping.")
         exit(1)
 
     # Bump
@@ -133,11 +144,20 @@ if args.command == "bump":
     subprocess.check_output(["git", "commit", "-m", message])
     subprocess.check_output(["git", "tag", "v%s" % (new_version)])
 
+    if not args.push:
+        ans = input("Do you want to push your changes? (y/n): ")
+
+        if ans.lower() in ["y", "yes"]:
+            args.push = True
+
     if args.push:
+        subprocess.check_output(["git", "pull"])
         print("[Info]\tPushing to origin...")
         subprocess.check_output(["git", "push", "origin", "main", "--tags"])
     else:
         print("[Info]\tApplied changes locally. Run 'git push origin main --tags' to push tags to remote and trigger a workflow.")
+
+
 elif args.command == "undo":
     if check_previous_commit_tagged():
         # Check previous commit
@@ -149,23 +169,28 @@ elif args.command == "undo":
         current_version = get_version()
 
         subprocess.check_output(["git", "reset", "--mixed", "HEAD~1"])
-        subprocess.check_output(["git", "stash", "push", "Cargo.lock", "Cargo.toml"])
+        subprocess.check_output(
+            ["git", "stash", "push", "Cargo.lock", "Cargo.toml"])
 
         subprocess.check_output(["git", "tag", "-d", "v" + current_version])
 
         reverted_version = get_version()
 
         if args.push:
-            subprocess.check_output(["git", "push", "-d", "origin", "v" + current_version])
-        
-            print("[Info]\tRemove tags will only remove tags and revert commits locally.")
-            ans = input(" > Do you want to also push the reverted commits? (WARNING! THIS WILL PERFORM A FORCE PUSH) (y/n): ").lower()
+            subprocess.check_output(
+                ["git", "push", "-d", "origin", "v" + current_version])
+
+            print(
+                "[Info]\tRemove tags will only remove tags and revert commits locally.")
+            ans = input(
+                " > Do you want to also push the reverted commits? (WARNING! THIS WILL PERFORM A FORCE PUSH) (y/n): ").lower()
 
             if ans == "y" or ans == "yes":
-                subprocess.check_output(["git", "push", "-f", "origin", "main"])
+                subprocess.check_output(
+                    ["git", "push", "-f", "origin", "main"])
 
-
-        print("[Info]\tReverted from v%s to v%s." % (current_version, reverted_version))
+        print("[Info]\tReverted from v%s to v%s." %
+              (current_version, reverted_version))
         exit(0)
     else:
         print("[Error]\tUnable to undo. Previous commit isn't tagged.")
@@ -178,6 +203,3 @@ elif args.command is None:
 else:
     print("[Error]\tUnknown command: %s" % args.command)
     exit(1)
-
-
-

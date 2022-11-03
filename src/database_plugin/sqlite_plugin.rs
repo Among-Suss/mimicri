@@ -299,10 +299,13 @@ impl DatabasePlugin for SQLitePlugin {
                             info_json, err
                         );
 
-                        let mut blank = MediaInfo::empty();
-                        blank.url = row.get::<String, _>(0);
+                        let url = row.get::<String, _>(0);
 
-                        blank
+                        MediaInfo {
+                            url: url.clone(),
+                            title: url.clone(),
+                            ..MediaInfo::empty()
+                        }
                     }
                 },
             );
