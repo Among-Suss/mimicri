@@ -1,13 +1,15 @@
 use std::{fmt::Display, sync::Arc};
 
 use serenity::{
-    builder::{CreateEmbed, CreateMessage, ParseValue},
+    builder::{CreateMessage, ParseValue},
     http::Http,
     model::prelude::{ChannelId, Message},
     prelude::Context,
     Result as SerenityResult,
 };
 use tracing::error;
+
+use crate::config;
 
 pub struct MessageContext {
     pub channel: ChannelId,
@@ -41,10 +43,7 @@ impl MessageContext {
     pub async fn send_info(&self, message: impl Display) {
         check_msg(
             self.channel
-                .send_message(self.http.clone(), |m| {
-                    m.content(message);
-                    m
-                })
+                .send_message(self.http.clone(), |m| format_info(m, message))
                 .await,
         );
     }
@@ -52,141 +51,68 @@ impl MessageContext {
     pub async fn send_error(&self, message: impl Display) {
         check_msg(
             self.channel
-                .send_message(self.http.clone(), |m| {
-                    m.content(message);
-                    m
-                })
+                .send_message(self.http.clone(), |m| format_error(m, message))
                 .await,
         );
     }
 
-    pub async fn send_simple_embed(
-        &self,
-        message: impl Display,
-        title: impl Display,
-        description: impl Display,
-    ) {
+    pub async fn reply_info(&self, reference: &Message, message: impl Display) {
         check_msg(
             self.channel
                 .send_message(self.http.clone(), |m| {
-                    m.content(message)
-                        .embed(|e| e.title(title).description(description));
-                    m
+                    format_reply(format_info(m, message), reference, false)
                 })
                 .await,
         );
     }
-
-    pub async fn reply(&self, reply_message: &Message, message: impl Display) {
+    pub async fn reply_error(&self, reference: &Message, message: impl Display) {
         check_msg(
             self.channel
                 .send_message(self.http.clone(), |m| {
-                    m.content(message)
-                        .reference_message(reply_message)
-                        .allowed_mentions(|f| {
-                            f.replied_user(false)
-                                .parse(ParseValue::Everyone)
-                                .parse(ParseValue::Users)
-                                .parse(ParseValue::Roles)
-                        });
-                    m
-                })
-                .await,
-        );
-    }
-
-    pub async fn reply_error(&self, reply_message: &Message, message: impl Display) {
-        check_msg(
-            self.channel
-                .send_message(self.http.clone(), |m| {
-                    m.content(message)
-                        .reference_message(reply_message)
-                        .allowed_mentions(|f| {
-                            f.replied_user(false)
-                                .parse(ParseValue::Everyone)
-                                .parse(ParseValue::Users)
-                                .parse(ParseValue::Roles)
-                        });
-                    m
-                })
-                .await,
-        );
-    }
-
-    pub async fn reply_embed<F>(&self, reply_message: &Message, embed_callback: F)
-    where
-        F: FnOnce(&mut CreateEmbed) -> &mut CreateEmbed,
-    {
-        check_msg(
-            self.channel
-                .send_message(self.http.clone(), |m| {
-                    m.content("")
-                        .embed(embed_callback)
-                        .reference_message(reply_message)
-                        .allowed_mentions(|f| {
-                            f.replied_user(false)
-                                .parse(ParseValue::Everyone)
-                                .parse(ParseValue::Users)
-                                .parse(ParseValue::Roles)
-                        });
-                    m
-                })
-                .await,
-        );
-    }
-
-    pub async fn reply_basic_embed(
-        &self,
-        reply_message: &Message,
-        message: impl Display,
-        title: impl Display,
-        description: impl Display,
-    ) {
-        check_msg(
-            self.channel
-                .send_message(self.http.clone(), |m| {
-                    m.content(message)
-                        .embed(|e| e.title(title).description(description))
-                        .reference_message(reply_message)
-                        .allowed_mentions(|f| {
-                            f.replied_user(false)
-                                .parse(ParseValue::Everyone)
-                                .parse(ParseValue::Users)
-                                .parse(ParseValue::Roles)
-                        });
-                    m
+                    format_reply(format_error(m, message), reference, true)
                 })
                 .await,
         );
     }
 }
 
-pub fn create_info_message(
-    m: &mut CreateMessage,
-    message: &String,
-    title: &String,
-    description: &String,
-) {
-    m.content(message)
-        .embed(|e| e.title(title).description(description));
+fn format_info<'a, 'b>(
+    m: &'b mut CreateMessage<'a>,
+    message: impl Display,
+) -> &'b mut CreateMessage<'a> {
+    m.content("").embed(|e| {
+        e.title("Info")
+            .description(&message)
+            .color(config::colors::info())
+    })
 }
 
-pub fn create_replay_message(
-    m: &mut CreateMessage,
-    msg: &Message,
-    message: &String,
-    title: &String,
-    description: &String,
-) {
-    create_info_message(m, message, title, description);
-    m.content(message)
-        .reference_message(msg)
-        .allowed_mentions(|f| {
+fn format_error<'a, 'b>(
+    m: &'b mut CreateMessage<'a>,
+    message: impl Display,
+) -> &'b mut CreateMessage<'a> {
+    m.content("").embed(|e| {
+        e.title("Error")
+            .description(&message)
+            .color(config::colors::error())
+    })
+}
+
+fn format_reply<'a, 'b>(
+    m: &'b mut CreateMessage<'a>,
+    reference: &Message,
+    do_mention: bool,
+) -> &'b mut CreateMessage<'a> {
+    m.reference_message(reference).allowed_mentions(|f| {
+        if !do_mention {
             f.replied_user(false)
                 .parse(ParseValue::Everyone)
                 .parse(ParseValue::Users)
                 .parse(ParseValue::Roles)
-        });
+        } else {
+            f
+        }
+    })
 }
 
 fn check_msg(result: SerenityResult<Message>) {

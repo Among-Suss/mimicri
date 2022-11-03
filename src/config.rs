@@ -46,4 +46,12 @@ pub mod colors {
     pub fn history() -> Colour {
         Colour::from_rgb(0xf5, 0xc5, 0x05)
     }
+
+    pub fn error() -> Colour {
+        Colour::RED
+    }
+
+    pub fn info() -> Colour {
+        Colour::BLUE
+    }
 }

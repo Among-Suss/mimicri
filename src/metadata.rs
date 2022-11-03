@@ -1,4 +1,4 @@
-use crate::media::MediaInfo;
+use crate::{media::MediaInfo, strings::parse_timestamp};
 use regex::Regex;
 use serde::{Deserialize, Serialize};
 use std::{collections::LinkedList, process};
@@ -140,7 +140,7 @@ pub fn is_playlist(url: &String) -> bool {
 }
 
 pub struct Timestamp {
-    seconds: i32,
+    seconds: i64,
     label: String,
     timestamp: String,
 }
@@ -154,9 +154,7 @@ pub fn get_timestamps(description: String) -> Vec<Timestamp> {
         if let Some(reg_match) = reg.find(line) {
             let timestamp_string = reg_match.as_str();
 
-            let seconds = timestamp_string.split(":").fold(0, |accum, x| {
-                accum * 60 + x.parse::<i32>().unwrap_or_default()
-            });
+            let seconds = parse_timestamp(&timestamp_string.to_string());
 
             timestamps.push(Timestamp {
                 seconds,

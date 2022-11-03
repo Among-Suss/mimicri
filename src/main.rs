@@ -10,7 +10,7 @@ mod strings;
 use dotenv::dotenv;
 use media::GlobalMediaPlayer;
 use std::{cmp, env, path::Path, sync::Arc};
-use tracing::info;
+use tracing::{info, warn};
 use tracing_subscriber::{fmt, layer::SubscriberExt};
 
 use songbird::SerenityInit;
@@ -37,7 +37,10 @@ use crate::{
     },
     message_context::MessageContext,
     play::queue_variant,
-    strings::{create_progress_bar, escape_string, format_timestamp, limit_string_length},
+    strings::{
+        create_progress_bar, escape_string, format_timestamp, is_timestamp, limit_string_length,
+        parse_timestamp,
+    },
 };
 
 struct Handler;
@@ -72,12 +75,11 @@ impl EventHandler for Handler {
 #[group]
 #[commands(
     play,
-    p,
     play_single,
     skip,
     queue,
     now_playing,
-    np,
+    seek,
     // history/playlist
     history,
     // debug
@@ -168,12 +170,7 @@ async fn version(ctx: &Context, msg: &Message) -> CommandResult {
 }
 
 #[command]
-#[only_in(guilds)]
-async fn p(ctx: &Context, msg: &Message, args: Args) -> CommandResult {
-    play(ctx, msg, args).await
-}
-
-#[command]
+#[aliases(p)]
 #[only_in(guilds)]
 async fn play(ctx: &Context, msg: &Message, args: Args) -> CommandResult {
     let guild = msg.guild(&ctx.cache).unwrap();
@@ -287,8 +284,12 @@ async fn skip(ctx: &Context, msg: &Message) -> CommandResult {
     };
 
     match res {
-        Ok(_) => message_context.send_info("Skipped current song!").await,
-        Err(err) => message_context.send_info(err).await,
+        Ok(_) => {
+            message_context
+                .reply_info(msg, "Skipped current song!")
+                .await
+        }
+        Err(err) => message_context.reply_error(msg, err).await,
     }
 
     Ok(())
@@ -296,9 +297,51 @@ async fn skip(ctx: &Context, msg: &Message) -> CommandResult {
 
 #[command]
 #[only_in(guilds)]
-async fn queue(ctx: &Context, msg: &Message, args: Args) -> CommandResult {
-    let mut page = str::parse::<usize>(args.raw().nth(0).unwrap_or_default()).unwrap_or_default();
-    page = cmp::max((page as i32) - 1, 0) as usize;
+async fn seek(ctx: &Context, msg: &Message, args: Args) -> CommandResult {
+    let message_context = MessageContext::new(ctx, msg);
+
+    let arg_1 = args.raw().nth(0).unwrap_or_default().to_string();
+    let guild_id = msg.guild_id.unwrap();
+
+    let time = if let Ok(seconds) = arg_1.parse::<i64>() {
+        seconds
+    } else if is_timestamp(&arg_1) {
+        parse_timestamp(&arg_1)
+    } else {
+        message_context
+            .reply_error(msg, format!("{} isn't a valid timestamp.", arg_1))
+            .await;
+
+        return Ok(());
+    };
+
+    if time < 0 {
+        message_context
+            .reply_error(msg, "Cannot seek to negative time.")
+            .await;
+
+        return Ok(());
+    }
+
+    match GLOBAL_MEDIA_PLAYER.seek(guild_id, time).await {
+        Ok(_) => {
+            message_context
+                .reply_info(msg, format!("Seeking to {}", format_timestamp(time)))
+                .await;
+        }
+        Err(err) => {
+            message_context.reply_error(msg, &err).await;
+            warn!("Seek error: {}", &err);
+        }
+    }
+
+    Ok(())
+}
+
+#[command]
+#[only_in(guilds)]
+async fn queue(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult {
+    let page = cmp::max(args.single::<i64>().unwrap_or_default() - 1, 0) as usize;
 
     let guild = msg.guild(&ctx.cache).unwrap();
     let guild_id = guild.id;
@@ -318,9 +361,7 @@ async fn queue(ctx: &Context, msg: &Message, args: Args) -> CommandResult {
     match res {
         Ok((queue, len)) => {
             if len == 0 {
-                message_ctx
-                    .send_simple_embed("", "Queue", "The queue is empty!")
-                    .await;
+                message_ctx.reply_info(msg, "The queue is empty!").await;
                 return Ok(());
             }
 
@@ -368,12 +409,7 @@ async fn queue(ctx: &Context, msg: &Message, args: Args) -> CommandResult {
 }
 
 #[command]
-#[only_in(guilds)]
-async fn np(ctx: &Context, msg: &Message, args: Args) -> CommandResult {
-    now_playing(ctx, msg, args).await
-}
-
-#[command]
+#[aliases(np)]
 #[only_in(guilds)]
 async fn now_playing(ctx: &Context, msg: &Message) -> CommandResult {
     let guild = msg.guild(&ctx.cache).unwrap();
@@ -424,13 +460,10 @@ async fn now_playing(ctx: &Context, msg: &Message) -> CommandResult {
 }
 
 #[command]
-async fn history(ctx: &Context, msg: &Message, args: Args) -> CommandResult {
+async fn history(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult {
     let message_ctx = MessageContext::new(ctx, msg);
 
-    let page = cmp::max(
-        (str::parse::<usize>(args.raw().nth(0).unwrap_or_default()).unwrap_or_default() as i32) - 1,
-        0,
-    ) as usize;
+    let page = cmp::max(args.single::<i64>().unwrap_or_default() - 1, 0) as usize;
 
     let db_plugin = get_db_plugin(ctx).await.unwrap().clone();
 
@@ -494,45 +527,6 @@ async fn history(ctx: &Context, msg: &Message, args: Args) -> CommandResult {
         message_ctx
             .send_error("Database error, unable to fetch history.")
             .await;
-    }
-
-    Ok(())
-}
-
-#[command]
-#[only_in(guilds)]
-async fn deafen(ctx: &Context, msg: &Message) -> CommandResult {
-    let guild = msg.guild(&ctx.cache).unwrap();
-    let guild_id = guild.id;
-
-    let manager = songbird::get(ctx)
-        .await
-        .expect("Songbird Voice client placed in at initialisation.")
-        .clone();
-
-    let handler_lock = match manager.get(guild_id) {
-        Some(handler) => handler,
-        None => {
-            check_msg(msg.reply(ctx, "Not in a voice channel").await);
-
-            return Ok(());
-        }
-    };
-
-    let mut handler = handler_lock.lock().await;
-
-    if handler.is_deaf() {
-        check_msg(msg.channel_id.say(&ctx.http, "Already deafened").await);
-    } else {
-        if let Err(e) = handler.deafen(true).await {
-            check_msg(
-                msg.channel_id
-                    .say(&ctx.http, format!("Failed: {:?}", e))
-                    .await,
-            );
-        }
-
-        check_msg(msg.channel_id.say(&ctx.http, "Deafened").await);
     }
 
     Ok(())
@@ -711,6 +705,45 @@ async fn mute(ctx: &Context, msg: &Message) -> CommandResult {
         }
 
         check_msg(msg.channel_id.say(&ctx.http, "Now muted").await);
+    }
+
+    Ok(())
+}
+
+#[command]
+#[only_in(guilds)]
+async fn deafen(ctx: &Context, msg: &Message) -> CommandResult {
+    let guild = msg.guild(&ctx.cache).unwrap();
+    let guild_id = guild.id;
+
+    let manager = songbird::get(ctx)
+        .await
+        .expect("Songbird Voice client placed in at initialisation.")
+        .clone();
+
+    let handler_lock = match manager.get(guild_id) {
+        Some(handler) => handler,
+        None => {
+            check_msg(msg.reply(ctx, "Not in a voice channel").await);
+
+            return Ok(());
+        }
+    };
+
+    let mut handler = handler_lock.lock().await;
+
+    if handler.is_deaf() {
+        check_msg(msg.channel_id.say(&ctx.http, "Already deafened").await);
+    } else {
+        if let Err(e) = handler.deafen(true).await {
+            check_msg(
+                msg.channel_id
+                    .say(&ctx.http, format!("Failed: {:?}", e))
+                    .await,
+            );
+        }
+
+        check_msg(msg.channel_id.say(&ctx.http, "Deafened").await);
     }
 
     Ok(())

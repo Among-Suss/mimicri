@@ -1,5 +1,6 @@
 use std::cmp;
 
+use regex::Regex;
 use serenity::model::prelude::GuildId;
 
 use crate::config;
@@ -75,6 +76,18 @@ pub fn format_timestamp(duration: i64) -> String {
     } else {
         format!("{}:{:02}:{:02}", hours, minutes, seconds).to_string()
     }
+}
+
+pub fn parse_timestamp(timestamp: &String) -> i64 {
+    timestamp.split(":").fold(0, |accum, x| {
+        accum * 60 + x.parse::<i64>().unwrap_or_default()
+    })
+}
+
+pub fn is_timestamp(string: &String) -> bool {
+    let reg = Regex::new("[0-9]*:?[0-9]?[0-9]:[0-9][0-9]").unwrap();
+
+    reg.is_match(string)
 }
 
 #[cfg(test)]
@@ -222,6 +235,30 @@ mod tests {
         #[test]
         fn hour_minutes_seconds() {
             assert_eq!(format_timestamp(60 * 60 + 60 + 59), "1:01:59")
+        }
+    }
+
+    mod parse_timestamp {
+        use super::*;
+
+        #[test]
+        fn parses_seconds() {
+            assert_eq!(parse_timestamp(&"0:30".to_string()), 30);
+        }
+
+        #[test]
+        fn parses_minutes() {
+            assert_eq!(parse_timestamp(&"1:30".to_string()), 90);
+        }
+
+        #[test]
+        fn parses_hour() {
+            assert_eq!(parse_timestamp(&"1:01:30".to_string()), 3690);
+        }
+
+        #[test]
+        fn parses_bad_string() {
+            assert_eq!(parse_timestamp(&"hello".to_string()), 0);
         }
     }
 }
