@@ -3,12 +3,9 @@ use std::env;
 use sqlite::OpenFlags;
 use tracing::{error, info};
 
-use super::plugin::{DBError, DatabasePlugin};
+use crate::media::MediaInfo;
 
-const USER_TABLE: &str = "users";
-const SONG_TABLE: &str = "songs";
-const PLAYLIST_TABLE: &str = "playlists";
-const PLAYLIST_MAP_TABLE: &str = "playlists_map";
+use super::plugin::{DBError, DatabasePlugin};
 
 const HISTORY_PLAYLIST: &str = "_history";
 
@@ -75,14 +72,15 @@ impl DatabasePlugin for SQLitePlugin {
         connection
             .execute(format!(
                 "
-                CREATE TABLE IF NOT EXISTS {USER_TABLE} (
+                CREATE TABLE IF NOT EXISTS users (
                     id INTEGER PRIMARY KEY
 
                 );
-                CREATE TABLE IF NOT EXISTS {SONG_TABLE} (
-                    url TEXT PRIMARY KEY
+                CREATE TABLE IF NOT EXISTS songs (
+                    url TEXT PRIMARY KEY,
+                    metadata TEXT
                 );
-                CREATE TABLE IF NOT EXISTS {PLAYLIST_TABLE} (
+                CREATE TABLE IF NOT EXISTS playlists (
                     id INTEGER PRIMARY KEY,
 
                     name TEXT NOT NULL,
@@ -92,10 +90,10 @@ impl DatabasePlugin for SQLitePlugin {
                         UNIQUE (name, user_id),
                     
                     CONSTRAINT del_users
-                        FOREIGN KEY(user_id) REFERENCES {USER_TABLE}(id)
+                        FOREIGN KEY(user_id) REFERENCES users(id)
                         ON DELETE CASCADE
                 );
-                CREATE TABLE IF NOT EXISTS {PLAYLIST_MAP_TABLE} (
+                CREATE TABLE IF NOT EXISTS playlists_map (
                     id INTEGER PRIMARY KEY,
 
                     playlist_id INTEGER,
@@ -105,11 +103,11 @@ impl DatabasePlugin for SQLitePlugin {
                         UNIQUE (playlist_id, song_url),
 
                     CONSTRAINT del_playlists
-                        FOREIGN KEY(playlist_id) REFERENCES {PLAYLIST_TABLE}(id)
+                        FOREIGN KEY(playlist_id) REFERENCES playlists(id)
                         ON DELETE CASCADE,
 
                     CONSTRAINT del_songs
-                        FOREIGN KEY(song_url) REFERENCES {SONG_TABLE}(url)
+                        FOREIGN KEY(song_url) REFERENCES songs(url)
                         ON DELETE CASCADE
                 );
                 "
@@ -127,8 +125,8 @@ impl DatabasePlugin for SQLitePlugin {
         let query = format!(
             "
                 BEGIN TRANSACTION;
-                INSERT OR IGNORE INTO {USER_TABLE} VALUES ({});
-                INSERT OR IGNORE INTO {PLAYLIST_TABLE} VALUES (NULL, '{}', {});
+                INSERT OR IGNORE INTO users VALUES ({});
+                INSERT OR IGNORE INTO playlists VALUES (NULL, '{}', {});
                 COMMIT;
                 ",
             user_id, name, user_id
@@ -155,7 +153,7 @@ impl DatabasePlugin for SQLitePlugin {
         let query = format!(
             "
                 PRAGMA foreign_keys = ON;
-                DELETE FROM {PLAYLIST_TABLE} WHERE name='{}' AND user_id = {};
+                DELETE FROM playlists WHERE name='{}' AND user_id = {};
                 ",
             name, user_id
         );
@@ -171,7 +169,12 @@ impl DatabasePlugin for SQLitePlugin {
         Ok(())
     }
 
-    fn add_playlist_song(&self, user_id: u64, name: &String, url: &String) -> Result<(), DBError> {
+    fn add_playlist_song(
+        &self,
+        user_id: u64,
+        name: &String,
+        info: MediaInfo,
+    ) -> Result<(), DBError> {
         if self.is_disabled() {
             return Ok(());
         }
@@ -181,15 +184,22 @@ impl DatabasePlugin for SQLitePlugin {
         let query = format!(
             "
             BEGIN TRANSACTION;
-                INSERT OR IGNORE INTO {USER_TABLE} VALUES ({});
-                INSERT OR IGNORE INTO {SONG_TABLE} VALUES ('{}');
-                INSERT OR IGNORE INTO {PLAYLIST_TABLE} VALUES (NULL, '{}', {});
-                INSERT OR REPLACE INTO {PLAYLIST_MAP_TABLE} VALUES (NULL, (
-                    SELECT id FROM {PLAYLIST_TABLE} WHERE name='{}' AND user_id={} LIMIT 1
+                INSERT OR IGNORE INTO users VALUES ({});
+                INSERT OR IGNORE INTO songs VALUES ('{}', '{}');
+                INSERT OR IGNORE INTO playlists VALUES (NULL, '{}', {});
+                INSERT OR REPLACE INTO playlists_map VALUES (NULL, (
+                    SELECT id FROM playlists WHERE name='{}' AND user_id={} LIMIT 1
                 ), '{}');
             COMMIT;
                 ",
-            user_id, url, name, user_id, name, user_id, url
+            user_id,
+            &info.url,
+            serde_json::to_value(info.clone()).unwrap().to_string(),
+            name,
+            user_id,
+            name,
+            user_id,
+            &info.url
         );
 
         match connection.execute(query) {
@@ -219,11 +229,11 @@ impl DatabasePlugin for SQLitePlugin {
             "
                 PRAGMA foreign_keys = ON;
 
-                DELETE FROM {PLAYLIST_MAP_TABLE}
+                DELETE FROM playlists_map
                 WHERE song_url='{}' AND 
                       id=(
                         SELECT id 
-                        FROM {PLAYLIST_TABLE}
+                        FROM playlists
                         WHERE name='{}' AND
                               user_id = {}
                       );
@@ -248,7 +258,7 @@ impl DatabasePlugin for SQLitePlugin {
         name: &String,
         amount: usize,
         page: usize,
-    ) -> Result<Vec<String>, DBError> {
+    ) -> Result<Vec<MediaInfo>, DBError> {
         if self.is_disabled() {
             return Err("SQLite plugin not enabled!".to_string());
         }
@@ -257,11 +267,12 @@ impl DatabasePlugin for SQLitePlugin {
 
         let query = format!(
             "
-            SELECT song_url
-            FROM {PLAYLIST_MAP_TABLE} 
-            WHERE playlist_id=(
+            SELECT playlists_map.song_url, songs.metadata 
+            FROM playlists_map 
+            INNER JOIN songs ON songs.url=playlists_map.song_url
+            WHERE playlists_map.playlist_id=(
                 SELECT id
-                FROM {PLAYLIST_TABLE}
+                FROM playlists
                 WHERE user_id={} AND name='{}'
             )
             ORDER BY id
@@ -274,17 +285,34 @@ impl DatabasePlugin for SQLitePlugin {
 
         let mut cursor = connection.prepare(query).unwrap().into_cursor();
 
-        let mut urls: Vec<String> = Vec::new();
+        let mut infos: Vec<MediaInfo> = Vec::new();
 
         while let Some(Ok(row)) = cursor.next() {
-            urls.push(row.get::<String, _>(0));
+            let info_json = row.get::<String, _>(1);
+
+            infos.push(
+                match serde_json::from_str::<MediaInfo>(info_json.as_str()) {
+                    Ok(info) => info,
+                    Err(err) => {
+                        error!(
+                            "Unable to deserialize json from history: {}. Error message: {}",
+                            info_json, err
+                        );
+
+                        let mut blank = MediaInfo::empty();
+                        blank.url = row.get::<String, _>(0);
+
+                        blank
+                    }
+                },
+            );
         }
 
-        Ok(urls)
+        Ok(infos)
     }
 
-    fn set_history(&self, user_id: u64, url: &String) -> Result<(), DBError> {
-        self.add_playlist_song(user_id, &HISTORY_PLAYLIST.to_string(), url)
+    fn set_history(&self, user_id: u64, info: MediaInfo) -> Result<(), DBError> {
+        self.add_playlist_song(user_id, &HISTORY_PLAYLIST.to_string(), info)
     }
 
     fn get_history(
@@ -292,7 +320,7 @@ impl DatabasePlugin for SQLitePlugin {
         user_id: u64,
         amount: usize,
         page: usize,
-    ) -> Result<Vec<String>, DBError> {
+    ) -> Result<Vec<MediaInfo>, DBError> {
         self.get_playlist(user_id, &HISTORY_PLAYLIST.to_string(), amount, page)
     }
 }
@@ -344,7 +372,7 @@ mod tests {
         };
         plugin.init_db();
 
-        assert!(plugin.set_history(1, &"url".to_string()).is_ok());
+        assert!(plugin.set_history(1, MediaInfo::empty()).is_ok());
     }
 
     #[test]
@@ -353,9 +381,10 @@ mod tests {
         let db = mock_db_plugin();
 
         let user_id = 1;
-        let song_url = "url1".to_string();
 
-        db.set_history(user_id, &song_url).unwrap();
+        let song = mock_info("url1");
+
+        db.set_history(user_id, song.clone()).unwrap();
 
         let connection = db.get_connection().unwrap();
 
@@ -392,12 +421,19 @@ mod tests {
             .unwrap();
 
         assert_eq!(user_row.get::<i64, _>(0), user_id as i64);
-        assert_eq!(song_row.get::<String, _>(0), song_url);
+        assert_eq!(song_row.get::<String, _>(0), song.url);
 
         assert_eq!(playlist_row.get::<String, _>(1), "_history");
         assert_eq!(playlist_row.get::<i64, _>(2), user_id as i64);
 
-        assert_eq!(playlist_map.get::<String, _>(2), song_url);
+        assert_eq!(playlist_map.get::<String, _>(2), song.url);
+    }
+
+    fn mock_info(url: &str) -> MediaInfo {
+        MediaInfo {
+            url: url.to_string(),
+            ..MediaInfo::empty()
+        }
     }
 
     #[test]
@@ -406,17 +442,17 @@ mod tests {
         let db = mock_db_plugin();
 
         let user_id = 1;
-        let song_1 = "url1".to_string();
-        let song_2 = "url2".to_string();
-        let song_3 = "url3".to_string();
-        let song_4 = "url4".to_string();
-        let song_5 = "url5".to_string();
+        let song_1 = mock_info("url1");
+        let song_2 = mock_info("url2");
+        let song_3 = mock_info("url3");
+        let song_4 = mock_info("url4");
+        let song_5 = mock_info("url5");
 
-        db.set_history(user_id, &song_1).unwrap();
-        db.set_history(user_id, &song_2).unwrap();
-        db.set_history(user_id, &song_3).unwrap();
-        db.set_history(user_id, &song_4).unwrap();
-        db.set_history(user_id, &song_5).unwrap();
+        db.set_history(user_id, song_1.clone()).unwrap();
+        db.set_history(user_id, song_2.clone()).unwrap();
+        db.set_history(user_id, song_3.clone()).unwrap();
+        db.set_history(user_id, song_4.clone()).unwrap();
+        db.set_history(user_id, song_5.clone()).unwrap();
 
         let history = db.get_history(user_id, 5, 0).unwrap();
 
@@ -434,17 +470,17 @@ mod tests {
         let db = mock_db_plugin();
 
         let user_id = 1;
-        let song_1 = "url1".to_string();
-        let song_2 = "url2".to_string();
-        let song_3 = "url3".to_string();
-        let song_4 = "url4".to_string();
-        let song_5 = "url5".to_string();
+        let song_1 = mock_info("url1");
+        let song_2 = mock_info("url2");
+        let song_3 = mock_info("url3");
+        let song_4 = mock_info("url4");
+        let song_5 = mock_info("url5");
 
-        db.set_history(user_id, &song_1).unwrap();
-        db.set_history(user_id, &song_2).unwrap();
-        db.set_history(user_id, &song_3).unwrap();
-        db.set_history(user_id, &song_4).unwrap();
-        db.set_history(user_id, &song_5).unwrap();
+        db.set_history(user_id, song_1).unwrap();
+        db.set_history(user_id, song_2).unwrap();
+        db.set_history(user_id, song_3.clone()).unwrap();
+        db.set_history(user_id, song_4.clone()).unwrap();
+        db.set_history(user_id, song_5.clone()).unwrap();
 
         let history = db.get_history(user_id, 5, 2).unwrap();
 
@@ -461,20 +497,23 @@ mod tests {
 
         let user_id = 1;
         let playlist_name = "playlist".to_string();
-        let url = "sussy url".to_string();
+        let song1 = mock_info("sussy_url");
+        let song2 = mock_info("extra_song_1");
+        let song3 = mock_info("extra_song_2");
 
-        db.add_playlist_song(user_id, &playlist_name, &url).unwrap();
-        db.add_playlist_song(user_id, &playlist_name, &"extra_song1".to_string())
+        db.add_playlist_song(user_id, &playlist_name, song1.clone())
             .unwrap();
-        db.add_playlist_song(user_id, &playlist_name, &"extra_song2".to_string())
+        db.add_playlist_song(user_id, &playlist_name, song2.clone())
+            .unwrap();
+        db.add_playlist_song(user_id, &playlist_name, song3.clone())
             .unwrap();
 
         let songs = db.get_playlist(user_id, &playlist_name, 3, 0).unwrap();
 
-        assert_eq!(songs[0], url);
+        assert_eq!(songs[0], song1);
         assert_eq!(songs.len(), 3);
 
-        db.delete_playlist_song(user_id, &playlist_name, &url)
+        db.delete_playlist_song(user_id, &playlist_name, &song1.url)
             .unwrap();
 
         let songs = db.get_playlist(user_id, &playlist_name, 3, 0).unwrap();
@@ -490,9 +529,12 @@ mod tests {
         let user_id = 5;
         let playlist_name = "amogus twerking compilation".to_string();
 
-        db.add_playlist_song(user_id, &playlist_name, &"song_1".to_string())
+        let song1 = mock_info("song_1");
+        let song2 = mock_info("song_2");
+
+        db.add_playlist_song(user_id, &playlist_name, song1)
             .unwrap();
-        db.add_playlist_song(user_id, &playlist_name, &"song_2".to_string())
+        db.add_playlist_song(user_id, &playlist_name, song2)
             .unwrap();
 
         let songs = db.get_playlist(user_id, &playlist_name, 10, 0).unwrap();
@@ -504,7 +546,7 @@ mod tests {
         let connection = db.get_connection().unwrap();
 
         let mut cursor = connection
-            .prepare(format!("SELECT COUNT(*) FROM {PLAYLIST_MAP_TABLE};"))
+            .prepare(format!("SELECT COUNT(*) FROM playlists_map;"))
             .unwrap()
             .into_cursor();
 

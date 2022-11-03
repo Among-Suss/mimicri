@@ -36,7 +36,6 @@ impl From<YoutubeDLJson> for MediaInfo {
             title: json.title.unwrap_or_default(),
             description: json.description.unwrap_or_default(),
             duration: json.duration.unwrap_or_default() as i64,
-            metadata: HashMap::new(),
             thumbnail: json.thumbnail.unwrap_or_default(),
         }
     }
@@ -57,7 +56,6 @@ impl From<YoutubeDLFlatJson> for MediaInfo {
             title: json.title.unwrap_or_default(),
             duration: json.duration.unwrap_or_default() as i64,
             description: json.description.unwrap_or_default(),
-            metadata: HashMap::new(),
             thumbnail: "".to_string(), // FIXME
         }
     }
@@ -172,40 +170,6 @@ pub fn get_timestamps(description: String) -> Vec<Timestamp> {
     }
 
     timestamps
-}
-
-pub fn get_videos_metadata(urls: Vec<String>) -> Result<Vec<Option<MediaInfo>>, String> {
-    if urls.is_empty() {
-        return Ok(vec![]);
-    }
-
-    match process::Command::new("youtube-dl")
-        .arg("-j")
-        .args(urls)
-        .output()
-    {
-        Err(_) => return Err("Failed to run youtube-dl".to_string()),
-        Ok(output) => {
-            let output_str = String::from_utf8_lossy(&output.stdout);
-            let err_str = String::from_utf8_lossy(&output.stderr);
-
-            if !err_str.is_empty() {
-                error!("[metadata] [youtube-dl] {}", err_str);
-            }
-
-            Ok(output_str
-                .split("\n")
-                .filter(|s| !s.is_empty())
-                .map(|s| match serde_json::from_str::<YoutubeDLJson>(s) {
-                    Ok(json) => Some(MediaInfo::from(json)),
-                    Err(err) => {
-                        error!("{}", err);
-                        None
-                    }
-                })
-                .collect())
-        }
-    }
 }
 
 #[cfg(test)]

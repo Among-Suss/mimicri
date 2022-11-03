@@ -36,7 +36,6 @@ use crate::{
         sqlite_plugin::SQLitePlugin,
     },
     message_context::MessageContext,
-    metadata::get_videos_metadata,
     play::queue_variant,
     strings::{create_progress_bar, escape_string, format_timestamp, limit_string_length},
 };
@@ -234,7 +233,7 @@ async fn play(ctx: &Context, msg: &Message, args: Args) -> CommandResult {
                             e.title(&info.title)
                                 .author(|a| a.name("Queued:"))
                                 // .description(format!("[{}]({})", info.title, info.url))
-                                .thumbnail(info.thumbnail)
+                                .thumbnail(&info.thumbnail)
                                 .url(&info.url)
                                 .color(config::colors::play())
                         })
@@ -244,7 +243,7 @@ async fn play(ctx: &Context, msg: &Message, args: Args) -> CommandResult {
                 })
                 .await;
 
-            let _ = db_plugin.set_history(*msg.author.id.as_u64(), &info.url);
+            let _ = db_plugin.set_history(*msg.author.id.as_u64(), info);
         }
         Err(err) => message_ctx.reply_error(msg, err).await,
     }
@@ -437,64 +436,49 @@ async fn history(ctx: &Context, msg: &Message, args: Args) -> CommandResult {
 
     if let Ok(mut history) = db_plugin.get_history(*msg.author.id.as_u64(), queue_page_size, 0) {
         history.reverse();
-        if let Ok(queue) = get_videos_metadata(history) {
-            let mut description = String::new();
+        let mut description = String::new();
 
-            for (i, info_option) in queue.iter().enumerate() {
-                if let Some(info) = info_option {
-                    description += &format!(
-                        "{}. **{}**  [↗️]({})\n",
-                        i + 1,
-                        escape_string(&limit_string_length(&info.title, queue_text_len)),
-                        info.url
-                    )
-                    .to_string();
-                }
-            }
-            message_ctx
-                .send_message(|m| {
-                    m.content("").embed(|e| {
-                        e.title(format!("{}'s History", msg.author.name))
-                            .description(
-                                queue
-                                    .into_iter()
-                                    .enumerate()
-                                    .map(|(i, info_option)| {
-                                        if let Some(info) = info_option {
-                                            format!(
-                                                "**{}) [{}]({})** ({})",
-                                                i + 1 + page * queue_page_size,
-                                                escape_string(&limit_string_length(
-                                                    &info.title,
-                                                    queue_text_len,
-                                                )),
-                                                info.url,
-                                                format_timestamp(info.duration)
-                                            )
-                                        } else {
-                                            format!(
-                                                "**{}) *Missing or removed song*",
-                                                i + 1 + page * queue_page_size,
-                                            )
-                                        }
-                                    })
-                                    .collect::<Vec<String>>()
-                                    .join("\n"),
-                            )
-                            .footer(|f| {
-                                f.text(format!("Page {} of {}", page + 1, len / queue_page_size))
-                            })
-                            .color(config::colors::history())
-                    });
-
-                    m
-                })
-                .await;
-        } else {
-            message_ctx
-                .send_error("youtube-dl error, unable to fetch data for history.")
-                .await;
+        for (i, info) in history.iter().enumerate() {
+            description += &format!(
+                "{}. **{}**  [↗️]({})\n",
+                i + 1,
+                escape_string(&limit_string_length(&info.title, queue_text_len)),
+                info.url
+            )
+            .to_string();
         }
+        message_ctx
+            .send_message(|m| {
+                m.content("").embed(|e| {
+                    e.title(format!("{}'s History", msg.author.name))
+                        .description(
+                            history
+                                .into_iter()
+                                .enumerate()
+                                .map(|(i, info)| {
+                                    format!(
+                                        "**{}) [{}]({})** ({})",
+                                        i + 1 + page * queue_page_size,
+                                        escape_string(&limit_string_length(
+                                            &info.title,
+                                            queue_text_len,
+                                        )),
+                                        info.url,
+                                        format_timestamp(info.duration)
+                                    )
+                                })
+                                .collect::<Vec<String>>()
+                                .join("\n"),
+                        )
+                        .footer(|f| {
+                            f.text(format!("Page {} of {}", page + 1, len / queue_page_size))
+                        })
+                        .color(config::colors::history())
+                });
+
+                m
+            })
+            .await;
     } else {
         message_ctx
             .send_error("Database error, unable to fetch history.")

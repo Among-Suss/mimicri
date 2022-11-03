@@ -1,3 +1,4 @@
+use serde::{Deserialize, Serialize};
 use serenity::async_trait;
 use serenity::model::prelude::GuildId;
 use songbird::input::{Input, Restartable};
@@ -20,14 +21,25 @@ impl MediaEventHandler {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, PartialEq, Debug, Serialize, Deserialize)]
 pub struct MediaInfo {
     pub url: String,
     pub title: String,
     pub duration: i64,
     pub description: String,
-    pub metadata: HashMap<String, String>,
     pub thumbnail: String,
+}
+
+impl MediaInfo {
+    pub fn empty() -> MediaInfo {
+        MediaInfo {
+            url: "".to_string(),
+            title: "".to_string(),
+            duration: 0,
+            description: "".to_string(),
+            thumbnail: "".to_string(),
+        }
+    }
 }
 
 pub struct MediaItem {
@@ -193,19 +205,6 @@ impl GlobalMediaPlayer {
     }
 }
 
-impl MediaInfo {
-    pub fn empty_media_info() -> Self {
-        MediaInfo {
-            url: String::from(""),
-            title: String::from(""),
-            duration: 0,
-            description: String::from(""),
-            metadata: HashMap::new(),
-            thumbnail: String::from(""),
-        }
-    }
-}
-
 #[async_trait]
 impl EventHandler for MediaEventHandler {
     async fn act(&self, _ctx: &EventContext<'_>) -> Option<Event> {
@@ -291,9 +290,10 @@ impl ChannelMediaPlayer {
                         let position = trackstate.position.as_secs() as i64;
                         Ok(Some((media_item.info.clone(), position)))
                     }
-                    Err(trackerror) => {
-                        Err(format!("Unable to get current song info from Track: {}", trackerror))
-                    }
+                    Err(trackerror) => Err(format!(
+                        "Unable to get current song info from Track: {}",
+                        trackerror
+                    )),
                 }
             }
             None => Ok(None),
@@ -312,7 +312,7 @@ impl ChannelMediaPlayer {
                 Some((media_item, _)) => {
                     return_queue.push_front(media_item.info.clone());
                 }
-                None => return_queue.push_front(MediaInfo::empty_media_info()),
+                None => return_queue.push_front(MediaInfo::empty()),
             }
             (start, length - 1)
         } else {
@@ -327,7 +327,7 @@ impl ChannelMediaPlayer {
             if i >= start {
                 match media_item {
                     Some(media_item) => return_queue.push_back(media_item.info.clone()),
-                    None => return_queue.push_back(MediaInfo::empty_media_info()),
+                    None => return_queue.push_back(MediaInfo::empty()),
                 }
             }
         }

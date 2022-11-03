@@ -5,6 +5,8 @@ use serenity::{
 
 use std::sync::Arc;
 
+use crate::media::MediaInfo;
+
 pub struct DatabasePluginKey;
 
 impl TypeMapKey for DatabasePluginKey {
@@ -12,16 +14,17 @@ impl TypeMapKey for DatabasePluginKey {
 }
 
 pub type DBError = String;
+pub type PluginResult = Result<(), DBError>;
+pub type PluginDataResult = Result<Vec<MediaInfo>, DBError>;
 
 pub trait DatabasePlugin: Sync + Send {
     fn init_db(&self);
 
-    fn set_history(&self, user_id: u64, url: &String) -> Result<(), DBError>;
-    fn get_history(&self, user_id: u64, amount: usize, page: usize)
-        -> Result<Vec<String>, DBError>;
+    fn set_history(&self, user_id: u64, song: MediaInfo) -> PluginResult;
+    fn get_history(&self, user_id: u64, amount: usize, page: usize) -> PluginDataResult;
 
-    fn create_playlist(&self, user_id: u64, name: &String) -> Result<(), DBError>;
-    fn delete_playlist(&self, user_id: u64, name: &String) -> Result<(), DBError>;
+    fn create_playlist(&self, user_id: u64, name: &String) -> PluginResult;
+    fn delete_playlist(&self, user_id: u64, name: &String) -> PluginResult;
 
     fn get_playlist(
         &self,
@@ -29,15 +32,11 @@ pub trait DatabasePlugin: Sync + Send {
         name: &String,
         amount: usize,
         page: usize,
-    ) -> Result<Vec<String>, DBError>;
+    ) -> PluginDataResult;
 
-    fn add_playlist_song(&self, user_id: u64, name: &String, url: &String) -> Result<(), DBError>;
-    fn delete_playlist_song(
-        &self,
-        user_id: u64,
-        name: &String,
-        url: &String,
-    ) -> Result<(), DBError>;
+    fn add_playlist_song(&self, user_id: u64, name: &String, song: MediaInfo) -> PluginResult;
+
+    fn delete_playlist_song(&self, user_id: u64, name: &String, url: &String) -> PluginResult;
 }
 
 fn register_database_plugin(
