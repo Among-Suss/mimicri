@@ -151,7 +151,19 @@ if args.command == "bump":
             args.push = True
 
     if args.push:
-        subprocess.check_output(["git", "pull"])
+        print("[Info]\tPulling to check... ", end="")
+
+        pull_process = subprocess.run(
+            ["git", "pull"], capture_output=True)
+
+        if "Already up to date." in str(pull_process.stdout):
+            print("ok.")
+        else:
+            print("warning.")
+            print(
+                "Remote contains changes not present in local. Make sure remote is update before bumping")
+            exit(1)
+
         print("[Info]\tPushing to origin...")
         subprocess.check_output(["git", "push", "origin", "main", "--tags"])
     else:
