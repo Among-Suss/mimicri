@@ -21,7 +21,7 @@ pub trait DatabasePlugin: Sync + Send {
     fn init_db(&self);
 
     fn set_history(&self, user_id: u64, song: MediaInfo) -> PluginResult;
-    fn get_history(&self, user_id: u64, amount: usize, page: usize) -> PluginDataResult;
+    fn get_history(&self, user_id: u64, amount: usize, offset: usize) -> PluginDataResult;
 
     fn create_playlist(&self, user_id: u64, name: &String) -> PluginResult;
     fn delete_playlist(&self, user_id: u64, name: &String) -> PluginResult;

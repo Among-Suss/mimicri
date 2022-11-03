@@ -427,18 +427,20 @@ async fn now_playing(ctx: &Context, msg: &Message) -> CommandResult {
 async fn history(ctx: &Context, msg: &Message, args: Args) -> CommandResult {
     let message_ctx = MessageContext::new(ctx, msg);
 
-    let mut page = str::parse::<usize>(args.raw().nth(0).unwrap_or_default()).unwrap_or_default();
-    page = cmp::max((page as i32) - 1, 0) as usize;
+    let page = cmp::max(
+        (str::parse::<usize>(args.raw().nth(0).unwrap_or_default()).unwrap_or_default() as i32) - 1,
+        0,
+    ) as usize;
 
     let db_plugin = get_db_plugin(ctx).await.unwrap().clone();
 
     let guild_id = msg.guild(&ctx.cache).unwrap().id;
 
-    let queue_page_size = config::queue::page_size(guild_id);
+    let page_size = config::queue::page_size(guild_id);
     let queue_text_len = config::queue::text_length(guild_id);
 
     if let Ok((mut history, count)) =
-        db_plugin.get_history(*msg.author.id.as_u64(), queue_page_size, 0)
+        db_plugin.get_history(*msg.author.id.as_u64(), page_size, page * page_size)
     {
         history.reverse();
         let mut description = String::new();
@@ -463,7 +465,7 @@ async fn history(ctx: &Context, msg: &Message, args: Args) -> CommandResult {
                                 .map(|(i, info)| {
                                     format!(
                                         "**{}) [{}]({})** ({})",
-                                        i + 1 + page * queue_page_size,
+                                        i + 1 + page * page_size,
                                         escape_string(&limit_string_length(
                                             &info.title,
                                             queue_text_len,
@@ -479,7 +481,7 @@ async fn history(ctx: &Context, msg: &Message, args: Args) -> CommandResult {
                             f.text(format!(
                                 "Page {} of {}",
                                 page + 1,
-                                (count as f32 / queue_page_size as f32).ceil()
+                                (count as f32 / page_size as f32).ceil()
                             ))
                         })
                         .color(config::colors::history())

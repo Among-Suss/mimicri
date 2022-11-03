@@ -261,7 +261,7 @@ impl DatabasePlugin for SQLitePlugin {
         user_id: u64,
         name: &String,
         amount: usize,
-        page: usize,
+        offset: usize,
     ) -> Result<(Vec<MediaInfo>, usize), DBError> {
         if self.is_disabled() {
             return Err("SQLite plugin not enabled!".to_string());
@@ -284,7 +284,7 @@ impl DatabasePlugin for SQLitePlugin {
             OFFSET {}
             ;
         ",
-            user_id, name, amount, page
+            user_id, name, amount, offset
         );
 
         let mut cursor = connection.prepare(query).unwrap().into_cursor();
@@ -349,9 +349,9 @@ impl DatabasePlugin for SQLitePlugin {
         &self,
         user_id: u64,
         amount: usize,
-        page: usize,
+        offset: usize,
     ) -> Result<(Vec<MediaInfo>, usize), DBError> {
-        self.get_playlist(user_id, &HISTORY_PLAYLIST.to_string(), amount, page)
+        self.get_playlist(user_id, &HISTORY_PLAYLIST.to_string(), amount, offset)
     }
 }
 
