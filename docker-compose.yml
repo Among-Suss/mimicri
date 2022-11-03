@@ -5,6 +5,7 @@ services:
     environment:
       - DISCORD_TOKEN=${DISCORD_TOKEN}
       - BOT_PREFIX=${BOT_PREFIX}
+      - DEBUG_CHANNEL_ID=${DEBUG_CHANNEL_ID}
       - LOG_FILE=/etc/data/output.txt
       - SQLITE_DB=/etc/data/db.sqlite
     image: poohcom1/mimicri:latest

@@ -56,7 +56,14 @@ impl EventHandler for Handler {
                 .await
                 .unwrap()
                 .id()
-                .say(&ctx.http, "Bot is ready")
+                .say(
+                    &ctx.http,
+                    format!(
+                        "{} is connected. Version: {}",
+                        ready.user.name,
+                        env!("VERGEN_GIT_SEMVER")
+                    ),
+                )
                 .await;
         }
     }
@@ -152,8 +159,6 @@ async fn version(ctx: &Context, msg: &Message) -> CommandResult {
         channel: msg.channel_id,
         http: ctx.http.clone(),
     };
-
-    info!(env!("VERGEN_GIT_SEMVER"));
 
     message_ctx
         .send_info(format!("Version: {}", env!("VERGEN_GIT_SEMVER")))
