@@ -576,7 +576,9 @@ async fn log(ctx: &Context, msg: &Message, args: Args) -> CommandResult {
         msg_ctx.send_error(log_msgs.1).await;
     }
 
-    msg_ctx.send_info(log_msgs.0).await;
+    msg_ctx
+        .send_message(|m| MessageContext::format_reply(m.content(log_msgs.0), msg, false))
+        .await;
 
     Ok(())
 }

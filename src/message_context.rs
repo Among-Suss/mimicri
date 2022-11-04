@@ -37,86 +37,86 @@ impl MessageContext {
     where
         for<'b> F: FnOnce(&'b mut CreateMessage<'a>) -> &'b mut CreateMessage<'a>,
     {
-        check_msg(self.channel.send_message(self.http.clone(), callback).await);
+        Self::check_msg(self.channel.send_message(self.http.clone(), callback).await);
     }
 
     pub async fn send_info(&self, message: impl Display) {
-        check_msg(
+        Self::check_msg(
             self.channel
-                .send_message(self.http.clone(), |m| format_info(m, message))
+                .send_message(self.http.clone(), |m| Self::format_info(m, message))
                 .await,
         );
     }
 
     pub async fn send_error(&self, message: impl Display) {
-        check_msg(
+        Self::check_msg(
             self.channel
-                .send_message(self.http.clone(), |m| format_error(m, message))
+                .send_message(self.http.clone(), |m| Self::format_error(m, message))
                 .await,
         );
     }
 
     pub async fn reply_info(&self, reference: &Message, message: impl Display) {
-        check_msg(
+        Self::check_msg(
             self.channel
                 .send_message(self.http.clone(), |m| {
-                    format_reply(format_info(m, message), reference, false)
+                    Self::format_reply(Self::format_info(m, message), reference, false)
                 })
                 .await,
         );
     }
     pub async fn reply_error(&self, reference: &Message, message: impl Display) {
-        check_msg(
+        Self::check_msg(
             self.channel
                 .send_message(self.http.clone(), |m| {
-                    format_reply(format_error(m, message), reference, true)
+                    Self::format_reply(Self::format_error(m, message), reference, true)
                 })
                 .await,
         );
     }
-}
 
-fn format_info<'a, 'b>(
-    m: &'b mut CreateMessage<'a>,
-    message: impl Display,
-) -> &'b mut CreateMessage<'a> {
-    m.content("").embed(|e| {
-        e.title("Info")
-            .description(&message)
-            .color(config::colors::info())
-    })
-}
+    pub fn format_info<'a, 'b>(
+        m: &'b mut CreateMessage<'a>,
+        message: impl Display,
+    ) -> &'b mut CreateMessage<'a> {
+        m.content("").embed(|e| {
+            e.title("Info")
+                .description(&message)
+                .color(config::colors::info())
+        })
+    }
 
-fn format_error<'a, 'b>(
-    m: &'b mut CreateMessage<'a>,
-    message: impl Display,
-) -> &'b mut CreateMessage<'a> {
-    m.content("").embed(|e| {
-        e.title("Error")
-            .description(&message)
-            .color(config::colors::error())
-    })
-}
+    pub fn format_error<'a, 'b>(
+        m: &'b mut CreateMessage<'a>,
+        message: impl Display,
+    ) -> &'b mut CreateMessage<'a> {
+        m.content("").embed(|e| {
+            e.title("Error")
+                .description(&message)
+                .color(config::colors::error())
+        })
+    }
 
-fn format_reply<'a, 'b>(
-    m: &'b mut CreateMessage<'a>,
-    reference: &Message,
-    do_mention: bool,
-) -> &'b mut CreateMessage<'a> {
-    m.reference_message(reference).allowed_mentions(|f| {
-        if !do_mention {
-            f.replied_user(false)
-                .parse(ParseValue::Everyone)
-                .parse(ParseValue::Users)
-                .parse(ParseValue::Roles)
-        } else {
-            f
+    pub fn format_reply<'a, 'b>(
+        m: &'b mut CreateMessage<'a>,
+        reference: &Message,
+        do_mention: bool,
+    ) -> &'b mut CreateMessage<'a> {
+        m.reference_message(reference).allowed_mentions(|f| {
+            if !do_mention {
+                f.replied_user(false)
+                    .parse(ParseValue::Everyone)
+                    .parse(ParseValue::Users)
+                    .parse(ParseValue::Roles)
+            } else {
+                f
+            }
+        })
+    }
+
+    fn check_msg(result: SerenityResult<Message>) {
+        if let Err(why) = result {
+            error!("Error sending message: {:?}", why);
         }
-    })
-}
-
-fn check_msg(result: SerenityResult<Message>) {
-    if let Err(why) = result {
-        error!("Error sending message: {:?}", why);
     }
 }

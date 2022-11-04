@@ -132,7 +132,7 @@ if args.command == "bump":
         exit(1)
 
     # Bump
-    os.environ["RUSTFLAGS"] = "$RUSTFLAGS -Awarnings"
+    # os.environ["RUSTFLAGS"] = "-Awarnings" # Suppresses warning, but too slow
 
     subprocess.check_output(["cargo", "bump", bump_type])
     subprocess.check_output(["cargo", "check", "--quiet"])
