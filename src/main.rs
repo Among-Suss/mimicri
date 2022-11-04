@@ -36,6 +36,7 @@ use crate::{
         sqlite_plugin::SQLitePlugin,
     },
     message_context::MessageContext,
+    metadata::parse_timestamps,
     play::queue_variant,
     strings::{
         create_progress_bar, escape_string, format_timestamp, is_timestamp, limit_string_length,
@@ -80,6 +81,7 @@ impl EventHandler for Handler {
     queue,
     now_playing,
     seek,
+    timestamp,
     // history/playlist
     history,
     // debug
@@ -454,6 +456,47 @@ async fn now_playing(ctx: &Context, msg: &Message) -> CommandResult {
             };
         }
         Err(err) => message_ctx.reply_error(&msg, err).await,
+    }
+
+    Ok(())
+}
+
+#[command]
+#[aliases(timestamps)]
+#[only_in(guilds)]
+async fn timestamp(ctx: &Context, msg: &Message) -> CommandResult {
+    let guild = msg.guild(&ctx.cache).unwrap();
+    let guild_id = guild.id;
+
+    let message_ctx = MessageContext {
+        channel: msg.channel_id,
+        http: ctx.http.clone(),
+    };
+    let np = GLOBAL_MEDIA_PLAYER.now_playing(guild_id).await;
+
+    match np {
+        Ok(result) => {
+            if let Some((song, _)) = result {
+                let timestamps = parse_timestamps(song.description);
+
+                message_ctx
+                    .reply_info(
+                        msg,
+                        format!(
+                            "{}",
+                            timestamps
+                                .into_iter()
+                                .map(|t| format!("**{}** {}", t.timestamp, t.label))
+                                .collect::<Vec<String>>()
+                                .join("\n")
+                        ),
+                    )
+                    .await;
+            } else {
+                message_ctx.reply_error(msg, "No song playing!").await;
+            }
+        }
+        Err(err) => message_ctx.reply_error(msg, format!("{}", err)).await,
     }
 
     Ok(())

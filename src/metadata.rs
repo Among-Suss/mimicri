@@ -140,12 +140,13 @@ pub fn is_playlist(url: &String) -> bool {
 }
 
 pub struct Timestamp {
-    seconds: i64,
-    label: String,
-    timestamp: String,
+    pub seconds: i64,
+    pub label: String,
+    pub timestamp: String,
+    pub string: String,
 }
 
-pub fn get_timestamps(description: String) -> Vec<Timestamp> {
+pub fn parse_timestamps(description: String) -> Vec<Timestamp> {
     let mut timestamps: Vec<Timestamp> = Vec::new();
 
     let reg = Regex::new("[0-9]*:?[0-9]?[0-9]:[0-9][0-9]").unwrap();
@@ -156,9 +157,23 @@ pub fn get_timestamps(description: String) -> Vec<Timestamp> {
 
             let seconds = parse_timestamp(&timestamp_string.to_string());
 
+            let front = line[0..reg_match.start()].trim();
+            let back = line[reg_match.end()..line.len()].trim();
+
             timestamps.push(Timestamp {
+                string: line.to_string(),
                 seconds,
-                label: line[reg_match.end()..line.len()].trim().to_string(),
+                label: format!(
+                    "{}{}{}",
+                    front,
+                    if front.len() > 0 && back.len() > 0 {
+                        " "
+                    } else {
+                        ""
+                    },
+                    back
+                )
+                .to_string(),
                 timestamp: timestamp_string.to_string(),
             })
         }
@@ -229,11 +244,11 @@ mod tests {
     mod timestamp {
         use crate::metadata::is_playlist;
 
-        use super::super::get_timestamps;
+        use super::super::parse_timestamps;
 
         #[test]
         fn single_line() {
-            let timestamps = get_timestamps("3:23 My description".to_string());
+            let timestamps = parse_timestamps("3:23 My description".to_string());
 
             assert_eq!(timestamps[0].label, "My description");
             assert_eq!(timestamps[0].timestamp, "3:23");
@@ -242,16 +257,21 @@ mod tests {
 
         #[test]
         fn mid_line() {
-            let timestamps = get_timestamps("Words to ignore 5:55 Some description".to_string());
+            let timestamps =
+                parse_timestamps("Description in front 5:55 Description behind".to_string());
 
-            assert_eq!(timestamps[0].label, "Some description");
+            assert_eq!(
+                timestamps[0].label,
+                "Description in front Description behind"
+            );
             assert_eq!(timestamps[0].timestamp, "5:55");
             assert_eq!(timestamps[0].seconds, 5 * 60 + 55);
         }
 
         #[test]
         fn multi_line() {
-            let timestamps = get_timestamps("3:23 My description\n1:06:34 Other desc".to_string());
+            let timestamps =
+                parse_timestamps("3:23 My description\n1:06:34 Other desc".to_string());
 
             assert_eq!(timestamps[0].label, "My description");
             assert_eq!(timestamps[0].timestamp, "3:23");
@@ -264,14 +284,14 @@ mod tests {
 
         #[test]
         fn empty() {
-            let timestamps = get_timestamps("".to_string());
+            let timestamps = parse_timestamps("".to_string());
 
             assert_eq!(timestamps.len(), 0);
         }
 
         #[test]
         fn no_timestamps() {
-            let timestamps = get_timestamps("Hi there\n23 susser\nimposter".to_string());
+            let timestamps = parse_timestamps("Hi there\n23 susser\nimposter".to_string());
 
             assert_eq!(timestamps.len(), 0);
         }
