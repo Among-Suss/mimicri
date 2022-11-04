@@ -21,7 +21,7 @@ use serenity::{
     framework::{
         standard::{
             macros::{command, group},
-            Args, CommandResult,
+            Args, CommandResult, Delimiter,
         },
         StandardFramework,
     },
@@ -84,6 +84,7 @@ impl EventHandler for Handler {
     timestamp,
     // history/playlist
     history,
+    play_history,
     // debug
     log,
     log_file,
@@ -515,10 +516,9 @@ async fn history(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult 
     let page_size = config::queue::page_size(guild_id);
     let queue_text_len = config::queue::text_length(guild_id);
 
-    if let Ok((mut history, count)) =
+    if let Ok((history, count)) =
         db_plugin.get_history(*msg.author.id.as_u64(), page_size, page * page_size)
     {
-        history.reverse();
         let mut description = String::new();
 
         for (i, info) in history.iter().enumerate() {
@@ -570,6 +570,41 @@ async fn history(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult 
         message_ctx
             .send_error("Database error, unable to fetch history.")
             .await;
+    }
+
+    Ok(())
+}
+
+#[command]
+#[aliases("play-history")]
+#[only_in(guilds)]
+async fn play_history(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult {
+    info!("hi");
+
+    let message_ctx = MessageContext::new(ctx, msg);
+
+    let no = cmp::max(args.single::<i64>().unwrap_or_default() - 1, 0) as usize;
+
+    let db_plugin = get_db_plugin(ctx).await.unwrap().clone();
+
+    if let Ok((history, count)) = db_plugin.get_history(*msg.author.id.as_u64(), 1, no) {
+        if history.len() > 0 {
+            return play(
+                ctx,
+                msg,
+                Args::new(&history[0].url, &[Delimiter::Single(' ')]),
+            )
+            .await;
+        } else {
+            message_ctx
+                .reply_warn(
+                    msg,
+                    format!("Song index not found. History contains {} songs.", count),
+                )
+                .await;
+        }
+    } else {
+        message_ctx.reply_error(msg, "Unable to load history").await;
     }
 
     Ok(())

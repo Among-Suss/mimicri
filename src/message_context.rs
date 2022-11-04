@@ -75,6 +75,16 @@ impl MessageContext {
         );
     }
 
+    pub async fn reply_warn(&self, reference: &Message, message: impl Display) {
+        Self::check_msg(
+            self.channel
+                .send_message(self.http.clone(), |m| {
+                    Self::format_reply(Self::format_warn(m, message), reference, true)
+                })
+                .await,
+        );
+    }
+
     pub fn format_info<'a, 'b>(
         m: &'b mut CreateMessage<'a>,
         message: impl Display,
@@ -94,6 +104,17 @@ impl MessageContext {
             e.title("Error")
                 .description(&message)
                 .color(config::colors::error())
+        })
+    }
+
+    pub fn format_warn<'a, 'b>(
+        m: &'b mut CreateMessage<'a>,
+        message: impl Display,
+    ) -> &'b mut CreateMessage<'a> {
+        m.content("").embed(|e| {
+            e.title("Warning")
+                .description(&message)
+                .color(config::colors::warn())
         })
     }
 

@@ -51,6 +51,10 @@ pub mod colors {
         Colour::RED
     }
 
+    pub fn warn() -> Colour {
+        Colour::ORANGE
+    }
+
     pub fn info() -> Colour {
         Colour::BLUE
     }

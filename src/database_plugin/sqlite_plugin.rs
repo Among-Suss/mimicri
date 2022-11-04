@@ -45,6 +45,96 @@ impl SQLitePlugin {
     fn is_disabled(&self) -> bool {
         self.path.eq("")
     }
+
+    fn _get_playlist(
+        &self,
+        user_id: u64,
+        name: &String,
+        amount: usize,
+        offset: usize,
+        reverse: bool,
+    ) -> Result<(Vec<MediaInfo>, usize), DBError> {
+        if self.is_disabled() {
+            return Err("SQLite plugin not enabled!".to_string());
+        }
+
+        let connection = self.get_connection()?;
+
+        let query = format!(
+            "
+            SELECT playlists_map.song_url, songs.metadata 
+            FROM playlists_map 
+            INNER JOIN songs ON songs.url=playlists_map.song_url
+            WHERE playlists_map.playlist_id=(
+                SELECT id
+                FROM playlists
+                WHERE user_id={} AND name='{}'
+            )
+            ORDER BY id {}
+            LIMIT {}
+            OFFSET {}
+            ;
+        ",
+            user_id,
+            name,
+            if reverse { "DESC" } else { "ASC" },
+            amount,
+            offset
+        );
+
+        let mut cursor = connection.prepare(query).unwrap().into_cursor();
+
+        let mut infos: Vec<MediaInfo> = Vec::new();
+
+        while let Some(Ok(row)) = cursor.next() {
+            let info_json = row.get::<String, _>(1);
+
+            infos.push(
+                match serde_json::from_str::<MediaInfo>(info_json.as_str()) {
+                    Ok(info) => info,
+                    Err(err) => {
+                        error!(
+                            "Unable to deserialize json from history: {}. Error message: {}",
+                            info_json, err
+                        );
+
+                        let url = row.get::<String, _>(0);
+
+                        MediaInfo {
+                            url: url.clone(),
+                            title: url.clone(),
+                            ..MediaInfo::empty()
+                        }
+                    }
+                },
+            );
+        }
+
+        // Get total
+        let query = format!(
+            "
+            SELECT count(*)
+            FROM playlists_map 
+            WHERE playlists_map.playlist_id=(
+                SELECT id
+                FROM playlists
+                WHERE user_id={} AND name='{}'
+            )
+            ;
+        ",
+            user_id, name,
+        );
+
+        let mut cursor = connection.prepare(query).unwrap().into_cursor();
+
+        let count = if let Some(Ok(row)) = cursor.next() {
+            row.get::<i64, _>(0)
+        } else {
+            0
+        };
+
+        Ok((infos, count as usize))
+    }
 }
 
 impl Default for SQLitePlugin {
@@ -263,82 +353,7 @@ impl DatabasePlugin for SQLitePlugin {
         amount: usize,
         offset: usize,
     ) -> Result<(Vec<MediaInfo>, usize), DBError> {
-        if self.is_disabled() {
-            return Err("SQLite plugin not enabled!".to_string());
-        }
-
-        let connection = self.get_connection()?;
-
-        let query = format!(
-            "
-            SELECT playlists_map.song_url, songs.metadata 
-            FROM playlists_map 
-            INNER JOIN songs ON songs.url=playlists_map.song_url
-            WHERE playlists_map.playlist_id=(
-                SELECT id
-                FROM playlists
-                WHERE user_id={} AND name='{}'
-            )
-            ORDER BY id
-            LIMIT {}
-            OFFSET {}
-            ;
-        ",
-            user_id, name, amount, offset
-        );
-
-        let mut cursor = connection.prepare(query).unwrap().into_cursor();
-
-        let mut infos: Vec<MediaInfo> = Vec::new();
-
-        while let Some(Ok(row)) = cursor.next() {
-            let info_json = row.get::<String, _>(1);
-
-            infos.push(
-                match serde_json::from_str::<MediaInfo>(info_json.as_str()) {
-                    Ok(info) => info,
-                    Err(err) => {
-                        error!(
-                            "Unable to deserialize json from history: {}. Error message: {}",
-                            info_json, err
-                        );
-
-                        let url = row.get::<String, _>(0);
-
-                        MediaInfo {
-                            url: url.clone(),
-                            title: url.clone(),
-                            ..MediaInfo::empty()
-                        }
-                    }
-                },
-            );
-        }
-
-        // Get total
-        let query = format!(
-            "
-            SELECT count(*)
-            FROM playlists_map 
-            WHERE playlists_map.playlist_id=(
-                SELECT id
-                FROM playlists
-                WHERE user_id={} AND name='{}'
-            )
-            ;
-        ",
-            user_id, name,
-        );
-
-        let mut cursor = connection.prepare(query).unwrap().into_cursor();
-
-        let count = if let Some(Ok(row)) = cursor.next() {
-            row.get::<i64, _>(0)
-        } else {
-            0
-        };
-
-        Ok((infos, count as usize))
+        self._get_playlist(user_id, name, amount, offset, false)
     }
 
     fn set_history(&self, user_id: u64, info: MediaInfo) -> Result<(), DBError> {
@@ -351,7 +366,7 @@ impl DatabasePlugin for SQLitePlugin {
         amount: usize,
         offset: usize,
     ) -> Result<(Vec<MediaInfo>, usize), DBError> {
-        self.get_playlist(user_id, &HISTORY_PLAYLIST.to_string(), amount, offset)
+        self._get_playlist(user_id, &HISTORY_PLAYLIST.to_string(), amount, offset, true)
     }
 }
 
@@ -516,7 +531,7 @@ mod tests {
 
     #[test]
     #[serial]
-    fn get_history() {
+    fn get_history_reversed() {
         let db = mock_db_plugin();
 
         let user_id = 1;
@@ -534,11 +549,11 @@ mod tests {
 
         let history = db.get_history(user_id, 5, 0).unwrap().0;
 
-        assert_eq!(song_1, history[0]);
-        assert_eq!(song_2, history[1]);
+        assert_eq!(song_1, history[4]);
+        assert_eq!(song_2, history[3]);
         assert_eq!(song_3, history[2]);
-        assert_eq!(song_4, history[3]);
-        assert_eq!(song_5, history[4]);
+        assert_eq!(song_4, history[1]);
+        assert_eq!(song_5, history[0]);
         assert_eq!(history.len(), 5);
     }
 
@@ -554,19 +569,19 @@ mod tests {
         let song_4 = mock_info("url4");
         let song_5 = mock_info("url5");
 
-        db.set_history(user_id, song_1).unwrap();
-        db.set_history(user_id, song_2).unwrap();
+        db.set_history(user_id, song_1.clone()).unwrap();
+        db.set_history(user_id, song_2.clone()).unwrap();
         db.set_history(user_id, song_3.clone()).unwrap();
-        db.set_history(user_id, song_4.clone()).unwrap();
-        db.set_history(user_id, song_5.clone()).unwrap();
+        db.set_history(user_id, song_4).unwrap();
+        db.set_history(user_id, song_5).unwrap();
 
         let query = db.get_history(user_id, 5, 2).unwrap();
         let history = query.0;
         let count = query.1;
 
         assert_eq!(song_3, history[0]);
-        assert_eq!(song_4, history[1]);
-        assert_eq!(song_5, history[2]);
+        assert_eq!(song_2, history[1]);
+        assert_eq!(song_1, history[2]);
         assert_eq!(count, 5);
     }
 

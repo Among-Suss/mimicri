@@ -21,6 +21,7 @@ pub trait DatabasePlugin: Sync + Send {
     fn init_db(&self);
 
     fn set_history(&self, user_id: u64, song: MediaInfo) -> PluginResult;
+    /// Returns the history. Latest song is index 0.
     fn get_history(&self, user_id: u64, amount: usize, offset: usize) -> PluginDataResult;
 
     fn create_playlist(&self, user_id: u64, name: &String) -> PluginResult;
