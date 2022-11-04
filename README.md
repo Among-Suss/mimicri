@@ -29,10 +29,7 @@ A small, performant, easy to host Discord music bot written in Rust with multi-s
 
 - youtube-dl
 - ffmpeg
-
-### Optional Dependencies
-
-- sqlite
+- sqlite3
 
 ### Config
 
@@ -62,7 +59,7 @@ cargo run
 To create a release build:
 
 ```sh
-cargo run --release
+cargo build --release
 ```
 
 ## Deploying
@@ -75,4 +72,4 @@ Use the `publish.py` python script to automatically update the version and push 
 
 The bump command does 3 things: bump the version on cargo, create a new commit containing only the bump, and tag the commit. With the `--push` flag, it will also automatically push to remote, triggering a workflow. You can run `./publish.py --help` to check out other tools and options.
 
-\*Note: If you're not using Unix Shell (a.k.a. you're on Windows), you might have to prefix the command with `py` or `python`.
+
