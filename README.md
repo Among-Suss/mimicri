@@ -10,7 +10,7 @@ A small, performant, easy to host Discord music bot written in Rust with multi-s
 
 - [x] Search
   - [ ] Platform-specific/fallback search
-- [ ] Status (current song, queue, metadata)
+- [x] Status (current song, queue, metadata)
 - [x] Seeking
 - [ ] Shuffling
 - [ ] Playlists
