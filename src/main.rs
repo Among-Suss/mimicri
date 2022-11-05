@@ -6,9 +6,8 @@ mod utils;
 
 use dotenv::dotenv;
 use media::global_media_player::GlobalMediaPlayer;
-use media::metadata;
 use std::{cmp, env, sync::Arc};
-use tracing::{info, warn};
+use tracing::info;
 use tracing_subscriber::{fmt, layer::SubscriberExt};
 use utils::{config, message_context, strings};
 
@@ -34,11 +33,7 @@ use crate::{
         sqlite_plugin::SQLitePlugin,
     },
     message_context::MessageContext,
-    metadata::parse_timestamps,
-    strings::{
-        create_progress_bar, escape_string, format_timestamp, is_timestamp, limit_string_length,
-        parse_timestamp,
-    },
+    strings::{escape_string, format_timestamp, limit_string_length},
 };
 
 struct Handler;
@@ -185,231 +180,33 @@ async fn play_single(ctx: &Context, msg: &Message, args: Args) -> CommandResult 
 #[command]
 #[only_in(guilds)]
 async fn skip(ctx: &Context, msg: &Message) -> CommandResult {
-    let guild = msg.guild(&ctx.cache).unwrap();
-    let guild_id = guild.id;
-
-    let res = GLOBAL_MEDIA_PLAYER.skip(guild_id).await;
-
-    let message_context = MessageContext {
-        channel: msg.channel_id,
-        http: ctx.http.clone(),
-    };
-
-    match res {
-        Ok(_) => {
-            message_context
-                .reply_info(msg, "Skipped current song!")
-                .await
-        }
-        Err(err) => message_context.reply_error(msg, err).await,
-    }
-
-    Ok(())
+    media::commands::skip(&GLOBAL_MEDIA_PLAYER, ctx, msg).await
 }
 
 #[command]
 #[only_in(guilds)]
 async fn seek(ctx: &Context, msg: &Message, args: Args) -> CommandResult {
-    let message_context = MessageContext::new(ctx, msg);
-
-    let arg_1 = args.raw().nth(0).unwrap_or_default().to_string();
-    let guild_id = msg.guild_id.unwrap();
-
-    let time = if let Ok(seconds) = arg_1.parse::<i64>() {
-        seconds
-    } else if is_timestamp(&arg_1) {
-        parse_timestamp(&arg_1)
-    } else {
-        message_context
-            .reply_error(msg, format!("{} isn't a valid timestamp.", arg_1))
-            .await;
-
-        return Ok(());
-    };
-
-    if time < 0 {
-        message_context
-            .reply_error(msg, "Cannot seek to negative time.")
-            .await;
-
-        return Ok(());
-    }
-
-    match GLOBAL_MEDIA_PLAYER.seek(guild_id, time).await {
-        Ok(_) => {
-            message_context
-                .reply_info(msg, format!("Seeking to {}", format_timestamp(time)))
-                .await;
-        }
-        Err(err) => {
-            message_context.reply_error(msg, &err).await;
-            warn!("Seek error: {}", &err);
-        }
-    }
-
-    Ok(())
+    media::commands::seek(&GLOBAL_MEDIA_PLAYER, ctx, msg, args).await
 }
 
 #[command]
 #[only_in(guilds)]
-async fn queue(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult {
-    let page = cmp::max(args.single::<i64>().unwrap_or_default() - 1, 0) as usize;
-
-    let guild = msg.guild(&ctx.cache).unwrap();
-    let guild_id = guild.id;
-
-    let message_ctx = MessageContext {
-        channel: msg.channel_id,
-        http: ctx.http.clone(),
-    };
-
-    let queue_page_size = config::queue::page_size(guild_id);
-    let queue_text_len = config::queue::text_length(guild_id);
-
-    let res = GLOBAL_MEDIA_PLAYER
-        .read_queue(guild_id, page * queue_page_size, queue_page_size)
-        .await;
-
-    match res {
-        Ok((queue, len)) => {
-            if len == 0 {
-                message_ctx.reply_info(msg, "The queue is empty!").await;
-                return Ok(());
-            }
-
-            message_ctx
-                .send_message(|m| {
-                    m.content("").embed(|e| {
-                        e.title("Queue")
-                            .description(
-                                queue
-                                    .into_iter()
-                                    .enumerate()
-                                    .map(|(i, info)| {
-                                        format!(
-                                            "**{}) [{}]({})** ({})",
-                                            i + 1 + page * queue_page_size,
-                                            escape_string(&limit_string_length(
-                                                &info.title,
-                                                queue_text_len,
-                                            )),
-                                            info.url,
-                                            format_timestamp(info.duration)
-                                        )
-                                    })
-                                    .collect::<Vec<String>>()
-                                    .join("\n"),
-                            )
-                            .footer(|f| {
-                                f.text(format!(
-                                    "Page {} of {}",
-                                    page + 1,
-                                    len / queue_page_size + 1
-                                ))
-                            })
-                            .color(config::colors::queue())
-                    });
-
-                    m
-                })
-                .await;
-        }
-        Err(err) => message_ctx.send_error(err).await,
-    }
-
-    Ok(())
+async fn queue(ctx: &Context, msg: &Message, args: Args) -> CommandResult {
+    media::commands::queue(&GLOBAL_MEDIA_PLAYER, ctx, msg, args).await
 }
 
 #[command]
 #[aliases(np)]
 #[only_in(guilds)]
 async fn now_playing(ctx: &Context, msg: &Message) -> CommandResult {
-    let guild = msg.guild(&ctx.cache).unwrap();
-    let guild_id = guild.id;
-
-    let message_ctx = MessageContext {
-        channel: msg.channel_id,
-        http: ctx.http.clone(),
-    };
-    let res = GLOBAL_MEDIA_PLAYER.now_playing(guild_id).await;
-
-    match res {
-        Ok(res_tuple) => {
-            match res_tuple {
-                Some((info, time)) => {
-                    message_ctx
-                        .send_message(|m| {
-                            m.content("")
-                                .embed(|e| {
-                                    e.title(&info.title)
-                                        .description(format!(
-                                            "`{} ({}/{})`",
-                                            create_progress_bar(
-                                                guild_id,
-                                                time as f32 / info.duration as f32,
-                                            ),
-                                            format_timestamp(time),
-                                            format_timestamp(info.duration)
-                                        ))
-                                        .author(|a| a.name("Now playing:"))
-                                        .url(&info.url)
-                                        .thumbnail(info.thumbnail)
-                                        .color(config::colors::now_playing())
-                                })
-                                .reference_message(msg);
-
-                            m
-                        })
-                        .await;
-                }
-                None => message_ctx.reply_error(&msg, "No songs playing!").await,
-            };
-        }
-        Err(err) => message_ctx.reply_error(&msg, err).await,
-    }
-
-    Ok(())
+    media::commands::now_playing(&GLOBAL_MEDIA_PLAYER, ctx, msg).await
 }
 
 #[command]
 #[aliases(timestamps)]
 #[only_in(guilds)]
 async fn timestamp(ctx: &Context, msg: &Message) -> CommandResult {
-    let guild = msg.guild(&ctx.cache).unwrap();
-    let guild_id = guild.id;
-
-    let message_ctx = MessageContext {
-        channel: msg.channel_id,
-        http: ctx.http.clone(),
-    };
-    let np = GLOBAL_MEDIA_PLAYER.now_playing(guild_id).await;
-
-    match np {
-        Ok(result) => {
-            if let Some((song, _)) = result {
-                let timestamps = parse_timestamps(song.description);
-
-                message_ctx
-                    .reply_info(
-                        msg,
-                        format!(
-                            "{}",
-                            timestamps
-                                .into_iter()
-                                .map(|t| format!("**{}** {}", t.timestamp, t.label))
-                                .collect::<Vec<String>>()
-                                .join("\n")
-                        ),
-                    )
-                    .await;
-            } else {
-                message_ctx.reply_error(msg, "No song playing!").await;
-            }
-        }
-        Err(err) => message_ctx.reply_error(msg, format!("{}", err)).await,
-    }
-
-    Ok(())
+    media::commands::timestamp(&GLOBAL_MEDIA_PLAYER, ctx, msg).await
 }
 
 #[command]

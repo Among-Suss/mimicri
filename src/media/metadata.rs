@@ -1,9 +1,6 @@
-use regex::Regex;
 use serde::{Deserialize, Serialize};
 use std::{collections::LinkedList, process};
 use tracing::error;
-
-use crate::strings::parse_timestamp;
 
 use super::media_info::{MediaInfo, PlaylistInfo};
 
@@ -188,53 +185,10 @@ pub fn is_playlist(url: &String) -> bool {
         && (url.contains("/playlist?list=") || url.contains("&list="));
 }
 
-pub struct Timestamp {
-    pub seconds: i64,
-    pub label: String,
-    pub timestamp: String,
-    pub string: String,
-}
-
-pub fn parse_timestamps(description: String) -> Vec<Timestamp> {
-    let mut timestamps: Vec<Timestamp> = Vec::new();
-
-    let reg = Regex::new("[0-9]*:?[0-9]?[0-9]:[0-9][0-9]").unwrap();
-
-    for line in description.split("\n") {
-        if let Some(reg_match) = reg.find(line) {
-            let timestamp_string = reg_match.as_str();
-
-            let seconds = parse_timestamp(&timestamp_string.to_string());
-
-            let front = line[0..reg_match.start()].trim();
-            let back = line[reg_match.end()..line.len()].trim();
-
-            timestamps.push(Timestamp {
-                string: line.to_string(),
-                seconds,
-                label: format!(
-                    "{}{}{}",
-                    front,
-                    if front.len() > 0 && back.len() > 0 {
-                        " "
-                    } else {
-                        ""
-                    },
-                    back
-                )
-                .to_string(),
-                timestamp: timestamp_string.to_string(),
-            })
-        }
-    }
-
-    timestamps
-}
-
 #[cfg(test)]
 mod tests {
     mod search {
-        use crate::metadata::get_search;
+        use super::super::get_search;
 
         #[test]
         fn success() {
@@ -245,7 +199,7 @@ mod tests {
     }
 
     mod playlist {
-        use super::super::get_playlist;
+        use super::super::{get_playlist, is_playlist};
 
         #[test]
         fn success_page() {
@@ -287,62 +241,6 @@ mod tests {
             let sources = get_playlist(&"amogus".to_string()).unwrap();
 
             assert!(sources.is_empty());
-        }
-    }
-
-    mod timestamp {
-        use crate::metadata::is_playlist;
-
-        use super::super::parse_timestamps;
-
-        #[test]
-        fn single_line() {
-            let timestamps = parse_timestamps("3:23 My description".to_string());
-
-            assert_eq!(timestamps[0].label, "My description");
-            assert_eq!(timestamps[0].timestamp, "3:23");
-            assert_eq!(timestamps[0].seconds, 3 * 60 + 23);
-        }
-
-        #[test]
-        fn mid_line() {
-            let timestamps =
-                parse_timestamps("Description in front 5:55 Description behind".to_string());
-
-            assert_eq!(
-                timestamps[0].label,
-                "Description in front Description behind"
-            );
-            assert_eq!(timestamps[0].timestamp, "5:55");
-            assert_eq!(timestamps[0].seconds, 5 * 60 + 55);
-        }
-
-        #[test]
-        fn multi_line() {
-            let timestamps =
-                parse_timestamps("3:23 My description\n1:06:34 Other desc".to_string());
-
-            assert_eq!(timestamps[0].label, "My description");
-            assert_eq!(timestamps[0].timestamp, "3:23");
-            assert_eq!(timestamps[0].seconds, 3 * 60 + 23);
-
-            assert_eq!(timestamps[1].label, "Other desc");
-            assert_eq!(timestamps[1].timestamp, "1:06:34");
-            assert_eq!(timestamps[1].seconds, 1 * 3600 + 6 * 60 + 34);
-        }
-
-        #[test]
-        fn empty() {
-            let timestamps = parse_timestamps("".to_string());
-
-            assert_eq!(timestamps.len(), 0);
-        }
-
-        #[test]
-        fn no_timestamps() {
-            let timestamps = parse_timestamps("Hi there\n23 susser\nimposter".to_string());
-
-            assert_eq!(timestamps.len(), 0);
         }
 
         #[test]
