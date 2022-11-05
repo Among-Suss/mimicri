@@ -210,105 +210,16 @@ async fn timestamp(ctx: &Context, msg: &Message) -> CommandResult {
 }
 
 #[command]
-async fn history(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult {
-    let message_ctx = MessageContext::new(ctx, msg);
-
-    let page = cmp::max(args.single::<i64>().unwrap_or_default() - 1, 0) as usize;
-
-    let db_plugin = get_db_plugin(ctx).await.unwrap().clone();
-
-    let guild_id = msg.guild(&ctx.cache).unwrap().id;
-
-    let page_size = config::queue::page_size(guild_id);
-    let queue_text_len = config::queue::text_length(guild_id);
-
-    if let Ok((history, count)) =
-        db_plugin.get_history(*msg.author.id.as_u64(), page_size, page * page_size)
-    {
-        let mut description = String::new();
-
-        for (i, info) in history.iter().enumerate() {
-            description += &format!(
-                "{}. **{}**  [↗️]({})\n",
-                i + 1,
-                escape_string(&limit_string_length(&info.title, queue_text_len)),
-                info.url
-            )
-            .to_string();
-        }
-        message_ctx
-            .send_message(|m| {
-                m.content("").embed(|e| {
-                    e.title(format!("{}'s History", msg.author.name))
-                        .description(
-                            history
-                                .into_iter()
-                                .enumerate()
-                                .map(|(i, info)| {
-                                    format!(
-                                        "**{}) [{}]({})** ({})",
-                                        i + 1 + page * page_size,
-                                        escape_string(&limit_string_length(
-                                            &info.title,
-                                            queue_text_len,
-                                        )),
-                                        info.url,
-                                        format_timestamp(info.duration)
-                                    )
-                                })
-                                .collect::<Vec<String>>()
-                                .join("\n"),
-                        )
-                        .footer(|f| {
-                            f.text(format!(
-                                "Page {} of {}",
-                                page + 1,
-                                (count as f32 / page_size as f32).ceil()
-                            ))
-                        })
-                        .color(config::colors::history())
-                });
-
-                m
-            })
-            .await;
-    } else {
-        message_ctx
-            .send_error("Database error, unable to fetch history.")
-            .await;
-    }
-
-    Ok(())
+async fn history(ctx: &Context, msg: &Message, args: Args) -> CommandResult {
+    database::commands::history(ctx, msg, args).await
 }
 
 #[command]
 #[aliases("play-history")]
 #[only_in(guilds)]
-async fn play_history(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult {
-    let message_ctx = MessageContext::new(ctx, msg);
-
-    let no = cmp::max(args.single::<i64>().unwrap_or_default() - 1, 0) as usize;
-
-    let db_plugin = get_db_plugin(ctx).await.unwrap().clone();
-
-    if let Ok((history, count)) = db_plugin.get_history(*msg.author.id.as_u64(), 1, no) {
-        if history.len() > 0 {
-            return play(
-                ctx,
-                msg,
-                Args::new(&history[0].url, &[Delimiter::Single(' ')]),
-            )
-            .await;
-        } else {
-            message_ctx
-                .reply_warn(
-                    msg,
-                    format!("Song index not found. History contains {} songs.", count),
-                )
-                .await;
-        }
-    } else {
-        message_ctx.reply_error(msg, "Unable to load history").await;
+async fn play_history(ctx: &Context, msg: &Message, args: Args) -> CommandResult {
+    if let Some(url) = database::commands::play_history(ctx, msg, args).await {
+        return play(ctx, msg, Args::new(&url, &[Delimiter::Single(' ')])).await;
     }
 
     Ok(())
