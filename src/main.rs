@@ -2,11 +2,10 @@ mod controls;
 mod database;
 mod logging;
 mod media;
-mod play;
 mod utils;
 
 use dotenv::dotenv;
-use media::media::GlobalMediaPlayer;
+use media::global_media_player::GlobalMediaPlayer;
 use media::metadata;
 use std::{cmp, env, sync::Arc};
 use tracing::{info, warn};
@@ -36,7 +35,6 @@ use crate::{
     },
     message_context::MessageContext,
     metadata::parse_timestamps,
-    play::queue_variant,
     strings::{
         create_progress_bar, escape_string, format_timestamp, is_timestamp, limit_string_length,
         parse_timestamp,
@@ -175,101 +173,13 @@ async fn version(ctx: &Context, msg: &Message) -> CommandResult {
 #[aliases(p)]
 #[only_in(guilds)]
 async fn play(ctx: &Context, msg: &Message, args: Args) -> CommandResult {
-    let guild = msg.guild(&ctx.cache).unwrap();
-    let guild_id = guild.id;
-
-    let message_ctx = MessageContext::new(ctx, msg);
-
-    // Join vc
-    let user_vc = match guild
-        .voice_states
-        .get(&msg.author.id)
-        .and_then(|voice_state| voice_state.channel_id)
-    {
-        Some(vc) => vc,
-        None => {
-            message_ctx
-                .reply_error(msg, "Ur not even in a vc idio")
-                .await;
-            return Ok(());
-        }
-    };
-
-    match guild
-        .voice_states
-        .get(&ctx.cache.current_user_id())
-        .and_then(|voice_state| voice_state.channel_id)
-    {
-        Some(bot_vc) => {
-            if bot_vc != user_vc {
-                message_ctx.reply_error(msg, "Wrong channel dumbass").await;
-
-                return Ok(());
-            }
-        }
-        None => {
-            match join(ctx, msg, args.clone()).await {
-                Ok(_) => (),
-                Err(err) => message_ctx.reply_error(msg, err).await,
-            };
-        }
-    }
-
-    // Get url
-    let url = args.raw().collect::<Vec<&str>>().join(" ");
-
-    if url.eq("") {
-        message_ctx
-            .reply_error(msg, "You didn't send anything dumbass")
-            .await;
-
-        return Ok(());
-    }
-
-    let db_plugin = get_db_plugin(ctx).await.unwrap().clone();
-
-    match queue_variant(guild_id, &url, message_ctx.clone(), &GLOBAL_MEDIA_PLAYER).await {
-        Ok(info) => {
-            message_ctx
-                .send_message(|m| {
-                    m.content("")
-                        .embed(|e| {
-                            e.title(&info.title)
-                                .author(|a| a.name("Queued:"))
-                                // .description(format!("[{}]({})", info.title, info.url))
-                                .thumbnail(&info.thumbnail)
-                                .url(&info.url)
-                                .color(config::colors::play())
-                        })
-                        .reference_message(msg);
-
-                    m
-                })
-                .await;
-
-            let _ = db_plugin.set_history(*msg.author.id.as_u64(), info);
-        }
-        Err(err) => message_ctx.reply_error(msg, err).await,
-    }
-
-    Ok(())
+    media::commands::play_command(&GLOBAL_MEDIA_PLAYER, ctx, msg, args, true).await
 }
 
-// FIXME not working because it's not content, it's args
 #[command]
 #[only_in(guilds)]
 async fn play_single(ctx: &Context, msg: &Message, args: Args) -> CommandResult {
-    let list_index = msg.content.find("&list=");
-
-    let mut new_msg = msg.clone();
-
-    if let Some(ind) = list_index {
-        new_msg.content = msg.content.clone()[0..ind].to_string();
-    }
-
-    play(ctx, &new_msg, args).await?;
-
-    Ok(())
+    media::commands::play_command(&GLOBAL_MEDIA_PLAYER, ctx, msg, args, false).await
 }
 
 #[command]

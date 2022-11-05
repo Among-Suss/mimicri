@@ -5,7 +5,7 @@ use tracing::error;
 
 use crate::strings::parse_timestamp;
 
-use super::media_info::MediaInfo;
+use super::media_info::{MediaInfo, PlaylistInfo};
 
 #[derive(Serialize, Deserialize)]
 struct YoutubeDLJson {
@@ -16,8 +16,12 @@ struct YoutubeDLJson {
     duration: Option<f64>,
     thumbnail: Option<String>,
     webpage_url: Option<String>,
-    // Expected Nullables
-    playlist_title: Option<String>, // or playlist?
+    uploader: Option<String>,
+    channel: Option<String>,
+    // playlist
+    playlist_title: Option<String>,
+    playlist_uploader: Option<String>,
+    playlist_index: Option<i64>,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -27,6 +31,7 @@ struct YoutubeDLFlatJson {
     title: Option<String>,
     description: Option<String>,
     duration: Option<f64>,
+    uploader: Option<String>,
 }
 
 impl From<YoutubeDLJson> for MediaInfo {
@@ -37,6 +42,14 @@ impl From<YoutubeDLJson> for MediaInfo {
             description: json.description.unwrap_or_default(),
             duration: json.duration.unwrap_or_default() as i64,
             thumbnail: json.thumbnail.unwrap_or_default(),
+            uploader: json.uploader.unwrap_or_default(),
+            playlist: match json.playlist_title {
+                Some(playlist_title) => Some(PlaylistInfo {
+                    title: playlist_title,
+                    uploader: json.playlist_uploader.unwrap_or_default(),
+                }),
+                None => None,
+            },
         }
     }
 }
@@ -46,7 +59,7 @@ impl From<YoutubeDLFlatJson> for MediaInfo {
         let platform = json.ie_key.unwrap_or_default();
 
         let url = if platform == "Youtube" {
-            "www.youtube.com/watch?v=".to_string() + &json.id.unwrap_or_default()
+            "https://www.youtube.com/watch?v=".to_string() + &json.id.unwrap_or_default()
         } else {
             "".to_string()
         };
@@ -56,7 +69,9 @@ impl From<YoutubeDLFlatJson> for MediaInfo {
             title: json.title.unwrap_or_default(),
             duration: json.duration.unwrap_or_default() as i64,
             description: json.description.unwrap_or_default(),
+            uploader: json.uploader.unwrap_or_default(),
             thumbnail: "".to_string(), // FIXME
+            playlist: None,
         }
     }
 }
@@ -64,6 +79,7 @@ impl From<YoutubeDLFlatJson> for MediaInfo {
 pub fn get_info(url: &String) -> Result<MediaInfo, String> {
     match process::Command::new("youtube-dl")
         .arg("-j")
+        .arg("--no-playlist")
         .arg(url)
         .output()
     {
@@ -100,6 +116,36 @@ pub fn get_search(query: &String) -> Result<MediaInfo, String> {
 }
 
 pub fn get_playlist(url: &String) -> Result<LinkedList<MediaInfo>, String> {
+    let mut sources: LinkedList<MediaInfo> = LinkedList::new();
+
+    match process::Command::new("youtube-dl")
+        .arg("-j")
+        .arg("--playlist-end=1")
+        .arg(&url)
+        .output()
+    {
+        Err(_) => return Err("Failed to run youtube-dl".to_string()),
+        Ok(output) => {
+            let output_str = String::from_utf8_lossy(&output.stdout);
+            let err_str = String::from_utf8_lossy(&output.stderr);
+
+            if !err_str.is_empty() {
+                error!("[playlist] {}", err_str);
+            }
+
+            if let Some(line) = output_str.split("\n").nth(0) {
+                let json_result: serde_json::Result<YoutubeDLJson> = serde_json::from_str(line);
+
+                match json_result {
+                    Ok(json) => sources.push_back(MediaInfo::from(json)),
+                    Err(err) => error!("[playlist] {}", err),
+                }
+            } else {
+                error!("[playlist] First song is empty");
+            }
+        }
+    }
+
     match process::Command::new("youtube-dl")
         .arg("-j")
         .arg("--flat-playlist")
@@ -108,16 +154,16 @@ pub fn get_playlist(url: &String) -> Result<LinkedList<MediaInfo>, String> {
     {
         Err(_) => return Err("Failed to run youtube-dl".to_string()),
         Ok(output) => {
-            let mut sources: LinkedList<MediaInfo> = LinkedList::new();
-
             let output_str = String::from_utf8_lossy(&output.stdout);
             let err_str = String::from_utf8_lossy(&output.stderr);
 
             if !err_str.is_empty() {
-                error!("[playlist] [youtube-dl] {}", err_str);
+                error!("[playlist] {}", err_str);
             }
 
-            let lines = output_str.split("\n");
+            let mut lines = output_str.split("\n");
+
+            lines.next();
 
             for line in lines {
                 if line.is_empty() {
@@ -128,7 +174,7 @@ pub fn get_playlist(url: &String) -> Result<LinkedList<MediaInfo>, String> {
 
                 match json_result {
                     Ok(json) => sources.push_back(MediaInfo::from(json)),
-                    Err(err) => error!("[playlist] [youtube-dl] {}", err),
+                    Err(err) => error!("[playlist] {}", err),
                 }
             }
 

@@ -4,7 +4,9 @@ use serenity::{
 };
 use tracing::info;
 
-use crate::{media::media::GlobalMediaPlayer, utils::message_context::MessageContext};
+use crate::{
+    media::global_media_player::GlobalMediaPlayer, utils::message_context::MessageContext,
+};
 
 pub async fn join(media_player: &GlobalMediaPlayer, ctx: &Context, msg: &Message) -> CommandResult {
     let guild = msg.guild(&ctx.cache).unwrap();

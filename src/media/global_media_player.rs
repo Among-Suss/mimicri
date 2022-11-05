@@ -12,7 +12,7 @@ use crate::message_context::MessageContext;
 
 use super::media_info::MediaInfo;
 
-pub struct MediaEventHandler {
+struct MediaEventHandler {
     signaler: Arc<(async_std::sync::Mutex<bool>, async_std::sync::Condvar)>,
 }
 
@@ -320,14 +320,6 @@ impl ChannelMediaPlayer {
                     None => 0,
                 },
         )
-    }
-
-    async fn queue_length(&self) -> usize {
-        let (shared_media_queue_lock, _) = &self.lock_protected_media_queue;
-
-        let smq_locked = shared_media_queue_lock.lock().await;
-
-        smq_locked.queue.len()
     }
 
     async fn enqueue(&self, info: MediaInfo, message_ctx: MessageContext) {

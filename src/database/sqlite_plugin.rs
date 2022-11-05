@@ -433,6 +433,8 @@ mod tests {
             duration: 0,
             title: "".to_string(),
             thumbnail: "".to_string(),
+            uploader: "".to_string(),
+            playlist: None,
         };
 
         let result = db.add_playlist_song(user_id, &playlist, song.clone());
@@ -457,6 +459,8 @@ mod tests {
             duration: 0,
             title: "".to_string(),
             thumbnail: "".to_string(),
+            uploader: "".to_string(),
+            playlist: None,
         };
 
         let result = db.add_playlist_song(user_id, &playlist, song.clone());
