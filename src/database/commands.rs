@@ -104,48 +104,94 @@ pub mod interaction {
 
     use crate::database::plugin::get_db_plugin;
 
-    pub async fn on_playlist_create(ctx: Context, command: ApplicationCommandInteraction) {
-        if let Err(err) = command
-            .create_interaction_response(&ctx.http, |r| {
-                r.kind(InteractionResponseType::Modal)
-                    .interaction_response_data(|m| {
-                        m.title("Create Playlist")
-                            .custom_id("create_playlist")
-                            .components(|c| {
-                                c.create_action_row(|r| {
-                                    r.create_input_text(|i| {
-                                        i.custom_id("create_playlist.input")
-                                            .label("Playlist name:")
-                                            .style(InputTextStyle::Short)
+    pub mod playlist_create {
+        use super::*;
+
+        pub const COMMAND_NAME: &str = "playlist";
+        pub const SUBMIT_ID: &str = "createPlaylist.Modal";
+
+        pub async fn modal(ctx: Context, command: ApplicationCommandInteraction) {
+            if let Err(err) = command
+                .create_interaction_response(&ctx.http, |r| {
+                    r.kind(InteractionResponseType::Modal)
+                        .interaction_response_data(|m| {
+                            m.title("Create Playlist")
+                                .custom_id(SUBMIT_ID)
+                                .components(|c| {
+                                    c.create_action_row(|r| {
+                                        r.create_input_text(|i| {
+                                            i.custom_id("create_playlist.input")
+                                                .label("Playlist name:")
+                                                .style(InputTextStyle::Short)
+                                        })
                                     })
                                 })
-                            })
-                    })
-            })
-            .await
-        {
-            error!("Unable to create playlist modal: {:?}", err);
+                        })
+                })
+                .await
+            {
+                error!("Unable to create playlist modal: {:?}", err);
+            }
+        }
+
+        pub async fn submit(ctx: Context, interaction: ModalSubmitInteraction) {
+            if let ActionRowComponent::InputText(input) =
+                &interaction.data.components[0].components[0]
+            {
+                let playlist_name = &input.value;
+
+                if let Some(db_plugin) = get_db_plugin(&ctx).await {
+                    let _ = db_plugin.create_playlist(interaction.user.id, playlist_name);
+
+                    if let Err(err) = interaction
+                        .create_interaction_response(&ctx.http, |r| {
+                            r.kind(InteractionResponseType::ChannelMessageWithSource)
+                                .interaction_response_data(|d| {
+                                    d.content(format!("Created playlist: {}", playlist_name))
+                                })
+                        })
+                        .await
+                    {
+                        error!("Unable to submit playlist modal: {:?}", err);
+                    }
+                }
+            }
         }
     }
 
-    pub async fn on_playlist_create_submit(ctx: Context, interaction: ModalSubmitInteraction) {
-        if let ActionRowComponent::InputText(input) = &interaction.data.components[0].components[0]
-        {
-            let playlist_name = &input.value;
+    pub mod playlist_list {
+        use super::*;
 
+        pub const COMMAND_NAME: &str = "list-playlist";
+
+        pub async fn response(ctx: Context, command: ApplicationCommandInteraction) {
             if let Some(db_plugin) = get_db_plugin(&ctx).await {
-                let _ = db_plugin.create_playlist(interaction.user.id, playlist_name);
-
-                if let Err(err) = interaction
-                    .create_interaction_response(&ctx.http, |r| {
-                        r.kind(InteractionResponseType::ChannelMessageWithSource)
-                            .interaction_response_data(|d| {
-                                d.content(format!("Created playlist: {}", playlist_name))
-                            })
-                    })
-                    .await
-                {
-                    error!("Unable to submit playlist modal: {:?}", err);
+                if let Ok(playlists) = db_plugin.get_playlists(command.user.id, 10, 0) {
+                    if let Err(err) = command
+                        .create_interaction_response(&ctx.http, |r| {
+                            r.kind(InteractionResponseType::ChannelMessageWithSource)
+                                .interaction_response_data(|d| {
+                                    d.embed(|e| {
+                                        e.title(format!("{}'s playlists", command.user.name))
+                                            .description(if !playlists.is_empty() {
+                                                playlists
+                                                    .into_iter()
+                                                    .enumerate()
+                                                    .map(|(i, playlist)| {
+                                                        format!("{}. **{}**", i + 1, playlist)
+                                                    })
+                                                    .collect::<Vec<String>>()
+                                                    .join("\n")
+                                            } else {
+                                                format!("You don't have any playlists yet.")
+                                            })
+                                    })
+                                })
+                        })
+                        .await
+                    {
+                        error!("Unable to create playlist modal: {:?}", err);
+                    }
                 }
             }
         }

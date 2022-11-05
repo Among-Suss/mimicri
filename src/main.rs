@@ -6,7 +6,7 @@ mod utils;
 
 use dotenv::dotenv;
 use media::global_media_player::GlobalMediaPlayer;
-use std::{env, sync::Arc};
+use std::{collections::HashSet, env, sync::Arc};
 use tracing::info;
 use tracing_subscriber::{fmt, layer::SubscriberExt};
 use utils::{config, message_context};
@@ -19,14 +19,15 @@ use serenity::{
     client::{Client, Context},
     framework::{
         standard::{
-            macros::{command, group},
-            Args, CommandResult, Delimiter,
+            help_commands,
+            macros::{command, group, help},
+            Args, CommandGroup, CommandResult, Delimiter, HelpOptions,
         },
         StandardFramework,
     },
     model::{
         channel::Message,
-        prelude::{command::Command, interaction::Interaction, GuildId, Ready},
+        prelude::{command::Command, interaction::Interaction, GuildId, Ready, UserId},
     },
     prelude::{EventHandler, GatewayIntents},
 };
@@ -53,12 +54,13 @@ impl EventHandler for Handler {
                             .expect("DEBUG_GUILD_ID must be an integer!"),
                     ),
                     &ctx.http,
-                    register_commands,
+                    register_interactions,
                 )
                 .await;
             }
         } else {
-            let _ = Command::set_global_application_commands(&ctx.http, register_commands).await;
+            let _ =
+                Command::set_global_application_commands(&ctx.http, register_interactions).await;
         };
 
         // Debug Channel
@@ -86,59 +88,56 @@ impl EventHandler for Handler {
     }
 
     async fn interaction_create(&self, ctx: Context, interaction: Interaction) {
-        match interaction {
-            Interaction::ApplicationCommand(command) => {
-                match command.data.name.as_str() {
-                    "playlist" => {
-                        database::commands::interaction::on_playlist_create(ctx, command).await
-                    }
-
-                    &_ => (),
-                };
-            }
-
-            Interaction::ModalSubmit(modal_inter) => match modal_inter.data.custom_id.as_str() {
-                "create_playlist" => {
-                    database::commands::interaction::on_playlist_create_submit(ctx, modal_inter)
-                        .await;
-                }
-                &_ => (),
-            },
-            _ => (),
-        }
+        on_interaction(ctx, interaction).await
     }
 }
 
-fn register_commands(f: &mut CreateApplicationCommands) -> &mut CreateApplicationCommands {
-    f.create_application_command(|c| c.name("playlist").description("Create a playlist"))
+/// Register slash commands
+fn register_interactions(f: &mut CreateApplicationCommands) -> &mut CreateApplicationCommands {
+    use database::commands::interaction::{
+        playlist_create::COMMAND_NAME as CREATE_PLAYLIST_ID,
+        playlist_list::COMMAND_NAME as LIST_PLAYLIST_ID,
+    };
+
+    f.create_application_command(|c| c.name(CREATE_PLAYLIST_ID).description("Create a playlist"))
+        .create_application_command(|c| c.name(LIST_PLAYLIST_ID).description("List of playlists"))
+}
+
+/// Slash command event handler
+async fn on_interaction(ctx: Context, interaction: Interaction) {
+    use database::commands::interaction::{playlist_create, playlist_list};
+
+    match interaction {
+        Interaction::ApplicationCommand(command) => {
+            match command.data.name.as_str() {
+                playlist_create::COMMAND_NAME => playlist_create::modal(ctx, command).await,
+                playlist_list::COMMAND_NAME => playlist_list::response(ctx, command).await,
+                &_ => (),
+            };
+        }
+        Interaction::ModalSubmit(modal_inter) => match modal_inter.data.custom_id.as_str() {
+            playlist_create::SUBMIT_ID => playlist_create::submit(ctx, modal_inter).await,
+            &_ => (),
+        },
+        _ => (),
+    }
 }
 
 #[group]
-#[commands(
-    play,
-    play_single,
-    skip,
-    queue,
-    now_playing,
-    seek,
-    timestamp,
-    // history/playlist
-    history,
-    play_history,
-    // debug
-    log,
-    log_file,
-    // etc
-    version,
-    ping,
-    deafen,
-    join,
-    leave,
-    mute,
-    undeafen,
-    unmute,
-)]
-struct General;
+#[commands(play, play_single, skip, queue, now_playing, seek, timestamp)]
+struct Media;
+
+#[group]
+#[commands(history, play_history)]
+struct History;
+
+#[group]
+#[commands(log, log_file)]
+struct Log;
+
+#[group]
+#[commands(version, ping, deafen, join, leave, mute, undeafen, unmute)]
+struct Controls;
 
 static GLOBAL_MEDIA_PLAYER: GlobalMediaPlayer = GlobalMediaPlayer::UNINITIALIZED;
 
@@ -170,7 +169,11 @@ async fn main() {
 
     let framework = StandardFramework::new()
         .configure(|c| c.prefix(prefix))
-        .group(&GENERAL_GROUP);
+        .group(&MEDIA_GROUP)
+        .group(&HISTORY_GROUP)
+        .group(&LOG_GROUP)
+        .group(&CONTROLS_GROUP)
+        .help(&HELP);
 
     let intents = GatewayIntents::non_privileged() | GatewayIntents::MESSAGE_CONTENT;
 
@@ -198,6 +201,19 @@ async fn main() {
     info!("Received Ctrl-C, shutting down.");
 }
 
+#[help]
+async fn help(
+    context: &Context,
+    msg: &Message,
+    args: Args,
+    help_options: &'static HelpOptions,
+    groups: &[&'static CommandGroup],
+    owners: HashSet<UserId>,
+) -> CommandResult {
+    let _ = help_commands::with_embeds(context, msg, args, help_options, groups, owners).await;
+    Ok(())
+}
+
 #[command]
 async fn version(ctx: &Context, msg: &Message) -> CommandResult {
     let message_ctx = MessageContext {
@@ -213,6 +229,7 @@ async fn version(ctx: &Context, msg: &Message) -> CommandResult {
 }
 
 #[command]
+#[description = "Plays a song"]
 #[aliases(p)]
 #[only_in(guilds)]
 async fn play(ctx: &Context, msg: &Message, args: Args) -> CommandResult {

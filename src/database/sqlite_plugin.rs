@@ -217,6 +217,10 @@ impl DatabasePlugin for SQLitePlugin {
             return Ok(());
         }
 
+        if name == HISTORY_PLAYLIST {
+            return Err("Cannot use this name for a database.".to_string());
+        }
+
         let connection = self.get_connection()?;
 
         let query = format!(
@@ -402,7 +406,13 @@ impl DatabasePlugin for SQLitePlugin {
             .into_cursor()
             .filter_map(|r| {
                 if let Ok(row) = r {
-                    Some(row.get::<String, _>(0))
+                    let playlist = row.get::<String, _>(0);
+
+                    if playlist == HISTORY_PLAYLIST {
+                        None
+                    } else {
+                        Some(playlist)
+                    }
                 } else {
                     None
                 }
