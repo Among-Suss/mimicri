@@ -118,7 +118,7 @@ pub async fn play_command(
                     })
                     .await;
 
-                let _ = db_plugin.set_history(*msg.author.id.as_u64(), &info);
+                let _ = db_plugin.set_history(msg.author.id, &info);
             } else if count > 1 {
                 // Playlist
                 let info = infos.into_iter().nth(0).unwrap();

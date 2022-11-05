@@ -15,7 +15,8 @@ use songbird::SerenityInit;
 
 use serenity::{
     async_trait,
-    client::{Client, Context, EventHandler},
+    builder::CreateApplicationCommands,
+    client::{Client, Context},
     framework::{
         standard::{
             macros::{command, group},
@@ -23,8 +24,11 @@ use serenity::{
         },
         StandardFramework,
     },
-    model::{channel::Message, gateway::Ready},
-    prelude::GatewayIntents,
+    model::{
+        channel::Message,
+        prelude::{command::Command, interaction::Interaction, GuildId, Ready},
+    },
+    prelude::{EventHandler, GatewayIntents},
 };
 
 use crate::{
@@ -39,12 +43,33 @@ impl EventHandler for Handler {
     async fn ready(&self, ctx: Context, ready: Ready) {
         info!("{} is connected!", ready.user.name);
 
-        if let Ok(debug_channel) = env::var("DEBUG_CHANNEL_ID") {
-            let id = debug_channel.parse::<u64>().unwrap();
+        // Register application commands
+        if cfg!(debug_assertions) {
+            if let Ok(guild_id) = env::var("DEBUG_GUILD_ID") {
+                let _ = GuildId::set_application_commands(
+                    &GuildId(
+                        guild_id
+                            .parse()
+                            .expect("DEBUG_GUILD_ID must be an integer!"),
+                    ),
+                    &ctx.http,
+                    register_commands,
+                )
+                .await;
+            }
+        } else {
+            let _ = Command::set_global_application_commands(&ctx.http, register_commands).await;
+        };
 
+        // Debug Channel
+        if let Ok(debug_channel) = env::var("DEBUG_CHANNEL_ID") {
             let _ = ctx
                 .http
-                .get_channel(id)
+                .get_channel(
+                    debug_channel
+                        .parse::<u64>()
+                        .expect("DEBUG_CHANNEL_ID must be an integer!"),
+                )
                 .await
                 .unwrap()
                 .id()
@@ -59,6 +84,33 @@ impl EventHandler for Handler {
                 .await;
         }
     }
+
+    async fn interaction_create(&self, ctx: Context, interaction: Interaction) {
+        match interaction {
+            Interaction::ApplicationCommand(command) => {
+                match command.data.name.as_str() {
+                    "playlist" => {
+                        database::commands::interaction::on_playlist_create(ctx, command).await
+                    }
+
+                    &_ => (),
+                };
+            }
+
+            Interaction::ModalSubmit(modal_inter) => match modal_inter.data.custom_id.as_str() {
+                "create_playlist" => {
+                    database::commands::interaction::on_playlist_create_submit(ctx, modal_inter)
+                        .await;
+                }
+                &_ => (),
+            },
+            _ => (),
+        }
+    }
+}
+
+fn register_commands(f: &mut CreateApplicationCommands) -> &mut CreateApplicationCommands {
+    f.create_application_command(|c| c.name("playlist").description("Create a playlist"))
 }
 
 #[group]

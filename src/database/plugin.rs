@@ -1,5 +1,6 @@
 use serenity::{
     client::{ClientBuilder, Context},
+    model::prelude::UserId,
     prelude::TypeMapKey,
 };
 
@@ -20,24 +21,31 @@ pub type PluginDataResult = Result<(Vec<MediaInfo>, usize), DBError>;
 pub trait DatabasePlugin: Sync + Send {
     fn init_db(&self);
 
-    fn set_history(&self, user_id: u64, song: &MediaInfo) -> PluginResult;
+    fn set_history(&self, user_id: UserId, song: &MediaInfo) -> PluginResult;
     /// Returns the history. Latest song is index 0.
-    fn get_history(&self, user_id: u64, amount: usize, offset: usize) -> PluginDataResult;
+    fn get_history(&self, user_id: UserId, amount: usize, offset: usize) -> PluginDataResult;
 
-    fn create_playlist(&self, user_id: u64, name: &String) -> PluginResult;
-    fn delete_playlist(&self, user_id: u64, name: &String) -> PluginResult;
+    fn create_playlist(&self, user_id: UserId, name: &String) -> PluginResult;
+    fn delete_playlist(&self, user_id: UserId, name: &String) -> PluginResult;
 
     fn get_playlist(
         &self,
-        user_id: u64,
+        user_id: UserId,
         name: &String,
-        amt: usize,
-        page: usize,
+        amount: usize,
+        offset: usize,
     ) -> PluginDataResult;
 
-    fn add_playlist_song(&self, user_id: u64, name: &String, song: &MediaInfo) -> PluginResult;
+    fn get_playlists(
+        &self,
+        user_id: UserId,
+        amount: usize,
+        offset: usize,
+    ) -> Result<Vec<String>, String>;
 
-    fn delete_playlist_song(&self, user_id: u64, name: &String, url: &String) -> PluginResult;
+    fn add_playlist_song(&self, user_id: UserId, name: &String, song: &MediaInfo) -> PluginResult;
+
+    fn delete_playlist_song(&self, user_id: UserId, name: &String, url: &String) -> PluginResult;
 }
 
 fn register_database_plugin(

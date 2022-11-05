@@ -15,44 +15,52 @@ pub async fn history(ctx: &Context, msg: &Message, mut args: Args) -> CommandRes
 
     let page = cmp::max(args.single::<i64>().unwrap_or_default() - 1, 0) as usize;
 
-    let db_plugin = get_db_plugin(ctx).await.unwrap().clone();
-
     let guild_id = msg.guild(&ctx.cache).unwrap().id;
 
     let page_size = config::queue::page_size(guild_id);
     let queue_text_len = config::queue::text_length(guild_id);
 
-    if let Ok((history, count)) =
-        db_plugin.get_history(*msg.author.id.as_u64(), page_size, page * page_size)
-    {
-        let mut description = String::new();
+    if let Some(db_plugin) = get_db_plugin(ctx).await {
+        if let Ok((history, count)) =
+            db_plugin.get_history(msg.author.id, page_size, page * page_size)
+        {
+            let mut description = String::new();
 
-        for (i, info) in history.iter().enumerate() {
-            description += &format!(
-                "{}. **{}**  [↗️]({})\n",
-                i + 1,
-                strings::escape_string(&strings::limit_string_length(&info.title, queue_text_len)),
-                info.url
-            )
-            .to_string();
-        }
-        message_ctx
-            .send_message(|m| {
-                m.content("").embed(|e| {
-                    MessageContext::format_embed_playlist(e, history.iter(), count, guild_id, page)
+            for (i, info) in history.iter().enumerate() {
+                description += &format!(
+                    "{}. **{}**  [↗️]({})\n",
+                    i + 1,
+                    strings::escape_string(&strings::limit_string_length(
+                        &info.title,
+                        queue_text_len
+                    )),
+                    info.url
+                )
+                .to_string();
+            }
+            message_ctx
+                .send_message(|m| {
+                    m.content("").embed(|e| {
+                        MessageContext::format_embed_playlist(
+                            e,
+                            history.iter(),
+                            count,
+                            guild_id,
+                            page,
+                        )
                         .title(format!("{}'s History", msg.author.name))
                         .color(config::colors::history())
-                });
+                    });
 
-                m
-            })
-            .await;
-    } else {
-        message_ctx
-            .send_error("Database error, unable to fetch history.")
-            .await;
+                    m
+                })
+                .await;
+        } else {
+            message_ctx
+                .send_error("Database error, unable to fetch history.")
+                .await;
+        }
     }
-
     Ok(())
 }
 
@@ -61,22 +69,85 @@ pub async fn play_history(ctx: &Context, msg: &Message, mut args: Args) -> Optio
 
     let no = cmp::max(args.single::<i64>().unwrap_or_default() - 1, 0) as usize;
 
-    let db_plugin = get_db_plugin(ctx).await.unwrap().clone();
-
-    if let Ok((history, count)) = db_plugin.get_history(*msg.author.id.as_u64(), 1, no) {
-        if history.len() > 0 {
-            return Some(history[0].url.clone());
+    if let Some(db_plugin) = get_db_plugin(ctx).await {
+        if let Ok((history, count)) = db_plugin.get_history(msg.author.id, 1, no) {
+            if history.len() > 0 {
+                return Some(history[0].url.clone());
+            } else {
+                message_ctx
+                    .reply_warn(
+                        msg,
+                        format!("Song index not found. History contains {} songs.", count),
+                    )
+                    .await;
+            }
         } else {
-            message_ctx
-                .reply_warn(
-                    msg,
-                    format!("Song index not found. History contains {} songs.", count),
-                )
-                .await;
+            message_ctx.reply_error(msg, "Unable to load history").await;
         }
-    } else {
-        message_ctx.reply_error(msg, "Unable to load history").await;
     }
 
     None
+}
+
+pub mod interaction {
+    use serenity::{
+        model::prelude::{
+            component::{ActionRowComponent, InputTextStyle},
+            interaction::{
+                application_command::ApplicationCommandInteraction, modal::ModalSubmitInteraction,
+                InteractionResponseType,
+            },
+        },
+        prelude::Context,
+    };
+    use tracing::error;
+
+    use crate::database::plugin::get_db_plugin;
+
+    pub async fn on_playlist_create(ctx: Context, command: ApplicationCommandInteraction) {
+        if let Err(err) = command
+            .create_interaction_response(&ctx.http, |r| {
+                r.kind(InteractionResponseType::Modal)
+                    .interaction_response_data(|m| {
+                        m.title("Create Playlist")
+                            .custom_id("create_playlist")
+                            .components(|c| {
+                                c.create_action_row(|r| {
+                                    r.create_input_text(|i| {
+                                        i.custom_id("create_playlist.input")
+                                            .label("Playlist name:")
+                                            .style(InputTextStyle::Short)
+                                    })
+                                })
+                            })
+                    })
+            })
+            .await
+        {
+            error!("Unable to create playlist modal: {:?}", err);
+        }
+    }
+
+    pub async fn on_playlist_create_submit(ctx: Context, interaction: ModalSubmitInteraction) {
+        if let ActionRowComponent::InputText(input) = &interaction.data.components[0].components[0]
+        {
+            let playlist_name = &input.value;
+
+            if let Some(db_plugin) = get_db_plugin(&ctx).await {
+                let _ = db_plugin.create_playlist(interaction.user.id, playlist_name);
+
+                if let Err(err) = interaction
+                    .create_interaction_response(&ctx.http, |r| {
+                        r.kind(InteractionResponseType::ChannelMessageWithSource)
+                            .interaction_response_data(|d| {
+                                d.content(format!("Created playlist: {}", playlist_name))
+                            })
+                    })
+                    .await
+                {
+                    error!("Unable to submit playlist modal: {:?}", err);
+                }
+            }
+        }
+    }
 }
