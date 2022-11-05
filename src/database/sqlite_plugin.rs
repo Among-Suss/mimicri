@@ -267,7 +267,7 @@ impl DatabasePlugin for SQLitePlugin {
         &self,
         user_id: u64,
         name: &String,
-        info: MediaInfo,
+        info: &MediaInfo,
     ) -> Result<(), DBError> {
         if self.is_disabled() {
             return Ok(());
@@ -356,7 +356,7 @@ impl DatabasePlugin for SQLitePlugin {
         self._get_playlist(user_id, name, amount, offset, false)
     }
 
-    fn set_history(&self, user_id: u64, info: MediaInfo) -> Result<(), DBError> {
+    fn set_history(&self, user_id: u64, info: &MediaInfo) -> Result<(), DBError> {
         self.add_playlist_song(user_id, &HISTORY_PLAYLIST.to_string(), info)
     }
 
@@ -417,7 +417,7 @@ mod tests {
         };
         plugin.init_db();
 
-        assert!(plugin.set_history(1, MediaInfo::empty()).is_ok());
+        assert!(plugin.set_history(1, &MediaInfo::empty()).is_ok());
     }
 
     #[test]
@@ -437,7 +437,7 @@ mod tests {
             playlist: None,
         };
 
-        let result = db.add_playlist_song(user_id, &playlist, song.clone());
+        let result = db.add_playlist_song(user_id, &playlist, &song);
 
         assert!(result.is_ok());
 
@@ -463,7 +463,7 @@ mod tests {
             playlist: None,
         };
 
-        let result = db.add_playlist_song(user_id, &playlist, song.clone());
+        let result = db.add_playlist_song(user_id, &playlist, &song);
 
         assert!(result.is_ok());
 
@@ -481,7 +481,7 @@ mod tests {
 
         let song = mock_info("url1");
 
-        db.set_history(user_id, song.clone()).unwrap();
+        db.set_history(user_id, &song).unwrap();
 
         let connection = db.get_connection().unwrap();
 
@@ -545,11 +545,11 @@ mod tests {
         let song_4 = mock_info("url4");
         let song_5 = mock_info("url5");
 
-        db.set_history(user_id, song_1.clone()).unwrap();
-        db.set_history(user_id, song_2.clone()).unwrap();
-        db.set_history(user_id, song_3.clone()).unwrap();
-        db.set_history(user_id, song_4.clone()).unwrap();
-        db.set_history(user_id, song_5.clone()).unwrap();
+        db.set_history(user_id, &song_1).unwrap();
+        db.set_history(user_id, &song_2).unwrap();
+        db.set_history(user_id, &song_3).unwrap();
+        db.set_history(user_id, &song_4).unwrap();
+        db.set_history(user_id, &song_5).unwrap();
 
         let history = db.get_history(user_id, 5, 0).unwrap().0;
 
@@ -573,11 +573,11 @@ mod tests {
         let song_4 = mock_info("url4");
         let song_5 = mock_info("url5");
 
-        db.set_history(user_id, song_1.clone()).unwrap();
-        db.set_history(user_id, song_2.clone()).unwrap();
-        db.set_history(user_id, song_3.clone()).unwrap();
-        db.set_history(user_id, song_4).unwrap();
-        db.set_history(user_id, song_5).unwrap();
+        db.set_history(user_id, &song_1).unwrap();
+        db.set_history(user_id, &song_2).unwrap();
+        db.set_history(user_id, &song_3).unwrap();
+        db.set_history(user_id, &song_4).unwrap();
+        db.set_history(user_id, &song_5).unwrap();
 
         let query = db.get_history(user_id, 5, 2).unwrap();
         let history = query.0;
@@ -600,11 +600,11 @@ mod tests {
         let song2 = mock_info("extra_song_1");
         let song3 = mock_info("extra_song_2");
 
-        db.add_playlist_song(user_id, &playlist_name, song1.clone())
+        db.add_playlist_song(user_id, &playlist_name, &song1)
             .unwrap();
-        db.add_playlist_song(user_id, &playlist_name, song2.clone())
+        db.add_playlist_song(user_id, &playlist_name, &song2)
             .unwrap();
-        db.add_playlist_song(user_id, &playlist_name, song3.clone())
+        db.add_playlist_song(user_id, &playlist_name, &song3)
             .unwrap();
 
         let songs = db.get_playlist(user_id, &playlist_name, 3, 0).unwrap().0;
@@ -631,9 +631,9 @@ mod tests {
         let song1 = mock_info("song_1");
         let song2 = mock_info("song_2");
 
-        db.add_playlist_song(user_id, &playlist_name, song1)
+        db.add_playlist_song(user_id, &playlist_name, &song1)
             .unwrap();
-        db.add_playlist_song(user_id, &playlist_name, song2)
+        db.add_playlist_song(user_id, &playlist_name, &song2)
             .unwrap();
 
         let songs = db.get_playlist(user_id, &playlist_name, 10, 0).unwrap().0;
