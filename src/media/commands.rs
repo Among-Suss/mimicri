@@ -91,20 +91,28 @@ pub async fn play_command(
             let count = infos.len();
 
             if count == 1 {
+                // Single song
                 let info = infos.into_iter().nth(0).unwrap();
 
                 message_ctx
                     .send_message(|m| {
-                        m.content("")
+                        MessageContext::format_reply(m, msg, false)
+                            .content("")
                             .embed(|e| {
                                 e.title(&info.title)
-                                    .description(format!("**{}**", info.uploader))
+                                    .description(format!(
+                                        "**{}**",
+                                        if !info.uploader.is_empty() {
+                                            info.uploader.clone()
+                                        } else {
+                                            "unknown".to_string()
+                                        },
+                                    ))
                                     .author(|a| a.name("Queued song"))
                                     .thumbnail(&info.thumbnail)
                                     .url(&info.url)
                                     .color(config::colors::play())
-                            })
-                            .reference_message(msg);
+                            });
 
                         m
                     })
@@ -112,6 +120,7 @@ pub async fn play_command(
 
                 let _ = db_plugin.set_history(*msg.author.id.as_u64(), info);
             } else if count > 1 {
+                // Playlist
                 let info = infos.into_iter().nth(0).unwrap();
 
                 let playlist_info = match info.playlist {
@@ -121,19 +130,24 @@ pub async fn play_command(
 
                 message_ctx
                     .send_message(|m| {
-                        m.content("")
+                        MessageContext::format_reply(m, msg, false)
+                            .content("")
                             .embed(|e| {
                                 e.title(&playlist_info.0)
                                     .description(format!(
                                         "Uploader: **{}**\nTracks: **{}**",
-                                        playlist_info.1, count
+                                        if !playlist_info.1.is_empty() {
+                                            playlist_info.1
+                                        } else {
+                                            "unknown".to_string()
+                                        },
+                                        count
                                     ))
                                     .author(|a| a.name("Queued playlist"))
                                     .thumbnail(&info.thumbnail)
                                     .url(&info.url)
                                     .color(config::colors::play())
-                            })
-                            .reference_message(msg);
+                            });
 
                         m
                     })
@@ -318,9 +332,10 @@ pub async fn queue(
                             )
                             .footer(|f| {
                                 f.text(format!(
-                                    "Page {} of {}",
+                                    "Page {} of {} (# of tracks: {})",
                                     page + 1,
-                                    len / queue_page_size + 1
+                                    len / queue_page_size + 1,
+                                    len
                                 ))
                             })
                             .color(config::colors::queue())
