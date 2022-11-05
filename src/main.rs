@@ -6,10 +6,10 @@ mod utils;
 
 use dotenv::dotenv;
 use media::global_media_player::GlobalMediaPlayer;
-use std::{cmp, env, sync::Arc};
+use std::{env, sync::Arc};
 use tracing::info;
 use tracing_subscriber::{fmt, layer::SubscriberExt};
-use utils::{config, message_context, strings};
+use utils::{config, message_context};
 
 use songbird::SerenityInit;
 
@@ -28,12 +28,8 @@ use serenity::{
 };
 
 use crate::{
-    database::{
-        plugin::{get_db_plugin, DatabasePluginInit},
-        sqlite_plugin::SQLitePlugin,
-    },
+    database::{plugin::DatabasePluginInit, sqlite_plugin::SQLitePlugin},
     message_context::MessageContext,
-    strings::{escape_string, format_timestamp, limit_string_length},
 };
 
 struct Handler;
@@ -168,13 +164,27 @@ async fn version(ctx: &Context, msg: &Message) -> CommandResult {
 #[aliases(p)]
 #[only_in(guilds)]
 async fn play(ctx: &Context, msg: &Message, args: Args) -> CommandResult {
-    media::commands::play_command(&GLOBAL_MEDIA_PLAYER, ctx, msg, args, true).await
+    let typing_res = msg.channel_id.start_typing(&ctx.http);
+    let res = media::commands::play_command(&GLOBAL_MEDIA_PLAYER, ctx, msg, args, true).await;
+
+    if let Ok(typing) = typing_res {
+        let _ = typing.stop();
+    }
+
+    res
 }
 
 #[command]
 #[only_in(guilds)]
 async fn play_single(ctx: &Context, msg: &Message, args: Args) -> CommandResult {
-    media::commands::play_command(&GLOBAL_MEDIA_PLAYER, ctx, msg, args, false).await
+    let typing_res = msg.channel_id.start_typing(&ctx.http);
+    let res = media::commands::play_command(&GLOBAL_MEDIA_PLAYER, ctx, msg, args, false).await;
+
+    if let Ok(typing) = typing_res {
+        let _ = typing.stop();
+    }
+
+    res
 }
 
 #[command]
