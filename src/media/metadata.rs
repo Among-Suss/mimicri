@@ -1,8 +1,11 @@
-use crate::{media::MediaInfo, strings::parse_timestamp};
 use regex::Regex;
 use serde::{Deserialize, Serialize};
 use std::{collections::LinkedList, process};
 use tracing::error;
+
+use crate::strings::parse_timestamp;
+
+use super::media_info::MediaInfo;
 
 #[derive(Serialize, Deserialize)]
 struct YoutubeDLJson {

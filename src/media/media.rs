@@ -1,4 +1,3 @@
-use serde::{Deserialize, Serialize};
 use serenity::async_trait;
 use serenity::model::prelude::GuildId;
 use songbird::input::{Input, Restartable};
@@ -11,6 +10,8 @@ use tracing::{error, info};
 
 use crate::message_context::MessageContext;
 
+use super::media_info::MediaInfo;
+
 pub struct MediaEventHandler {
     signaler: Arc<(async_std::sync::Mutex<bool>, async_std::sync::Condvar)>,
 }
@@ -18,27 +19,6 @@ pub struct MediaEventHandler {
 impl MediaEventHandler {
     fn new(signaler: Arc<(async_std::sync::Mutex<bool>, async_std::sync::Condvar)>) -> Self {
         MediaEventHandler { signaler }
-    }
-}
-
-#[derive(Clone, PartialEq, Debug, Serialize, Deserialize)]
-pub struct MediaInfo {
-    pub url: String,
-    pub title: String,
-    pub duration: i64,
-    pub description: String,
-    pub thumbnail: String,
-}
-
-impl MediaInfo {
-    pub fn empty() -> MediaInfo {
-        MediaInfo {
-            url: "".to_string(),
-            title: "".to_string(),
-            duration: 0,
-            description: "".to_string(),
-            thumbnail: "".to_string(),
-        }
     }
 }
 

@@ -5,7 +5,7 @@ use serenity::{
 
 use std::sync::Arc;
 
-use crate::media::MediaInfo;
+use crate::media::media_info::MediaInfo;
 
 pub struct DatabasePluginKey;
 

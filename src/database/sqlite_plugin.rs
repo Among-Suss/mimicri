@@ -3,7 +3,7 @@ use std::env;
 use sqlite::OpenFlags;
 use tracing::{error, info};
 
-use crate::media::MediaInfo;
+use crate::media::media_info::MediaInfo;
 
 use super::plugin::{DBError, DatabasePlugin};
 
