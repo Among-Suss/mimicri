@@ -39,33 +39,8 @@ pub async fn history(ctx: &Context, msg: &Message, mut args: Args) -> CommandRes
         message_ctx
             .send_message(|m| {
                 m.content("").embed(|e| {
-                    e.title(format!("{}'s History", msg.author.name))
-                        .description(
-                            history
-                                .into_iter()
-                                .enumerate()
-                                .map(|(i, info)| {
-                                    format!(
-                                        "**{}) [{}]({})** ({})",
-                                        i + 1 + page * page_size,
-                                        strings::escape_string(&strings::limit_string_length(
-                                            &info.title,
-                                            queue_text_len,
-                                        )),
-                                        info.url,
-                                        strings::format_timestamp(info.duration)
-                                    )
-                                })
-                                .collect::<Vec<String>>()
-                                .join("\n"),
-                        )
-                        .footer(|f| {
-                            f.text(format!(
-                                "Page {} of {}",
-                                page + 1,
-                                (count as f32 / page_size as f32).ceil()
-                            ))
-                        })
+                    MessageContext::format_embed_playlist(e, history.iter(), count, guild_id, page)
+                        .title(format!("{}'s History", msg.author.name))
                         .color(config::colors::history())
                 });
 

@@ -1,15 +1,17 @@
 use std::{fmt::Display, sync::Arc};
 
 use serenity::{
-    builder::{CreateMessage, ParseValue},
+    builder::{CreateEmbed, CreateMessage, ParseValue},
     http::Http,
-    model::prelude::{ChannelId, Message},
+    model::prelude::{ChannelId, GuildId, Message},
     prelude::Context,
     Result as SerenityResult,
 };
 use tracing::error;
 
-use crate::config;
+use crate::{config, media::media_info::MediaInfo};
+
+use super::strings;
 
 pub struct MessageContext {
     pub channel: ChannelId,
@@ -133,6 +135,49 @@ impl MessageContext {
                 f
             }
         })
+    }
+
+    pub fn format_embed_playlist<'a, 'b, I>(
+        e: &'b mut CreateEmbed,
+        songs: I,
+        total: usize,
+        guild_id: GuildId,
+        page: usize,
+    ) -> &'b mut CreateEmbed
+    where
+        I: Iterator<Item = &'a MediaInfo>,
+    {
+        let page_size = config::queue::page_size(guild_id);
+        let text_len = config::queue::text_length(guild_id);
+
+        e.description(
+            songs
+                .enumerate()
+                .map(|(i, info)| {
+                    format!(
+                        "**{}) [{}]({})** ({})",
+                        i + 1 + page * page_size,
+                        strings::escape_string(&strings::limit_string_length(
+                            &info.title,
+                            text_len,
+                        )),
+                        info.url,
+                        strings::format_timestamp(info.duration)
+                    )
+                })
+                .collect::<Vec<String>>()
+                .join("\n"),
+        )
+        .footer(|f| {
+            f.text(format!(
+                "Page {} of {} ({} track(s))",
+                page + 1,
+                total / page_size + 1,
+                total
+            ))
+        });
+
+        e
     }
 
     fn check_msg(result: SerenityResult<Message>) {

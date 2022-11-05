@@ -294,7 +294,6 @@ pub async fn queue(
     };
 
     let queue_page_size = config::queue::page_size(guild_id);
-    let queue_text_len = config::queue::text_length(guild_id);
 
     let res = media_player
         .read_queue(guild_id, page * queue_page_size, queue_page_size)
@@ -310,34 +309,8 @@ pub async fn queue(
             message_ctx
                 .send_message(|m| {
                     m.content("").embed(|e| {
-                        e.title("Queue")
-                            .description(
-                                queue
-                                    .into_iter()
-                                    .enumerate()
-                                    .map(|(i, info)| {
-                                        format!(
-                                            "**{}) [{}]({})** ({})",
-                                            i + 1 + page * queue_page_size,
-                                            strings::escape_string(&strings::limit_string_length(
-                                                &info.title,
-                                                queue_text_len,
-                                            )),
-                                            info.url,
-                                            strings::format_timestamp(info.duration)
-                                        )
-                                    })
-                                    .collect::<Vec<String>>()
-                                    .join("\n"),
-                            )
-                            .footer(|f| {
-                                f.text(format!(
-                                    "Page {} of {} (# of tracks: {})",
-                                    page + 1,
-                                    len / queue_page_size + 1,
-                                    len
-                                ))
-                            })
+                        MessageContext::format_embed_playlist(e, queue.iter(), len, guild_id, page)
+                            .title("Queue")
                             .color(config::colors::queue())
                     });
 
