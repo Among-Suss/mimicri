@@ -229,9 +229,10 @@ async fn version(ctx: &Context, msg: &Message) -> CommandResult {
 }
 
 #[command]
-#[description = "Plays a song"]
-#[aliases(p)]
 #[only_in(guilds)]
+#[description = "Plays a song"]
+#[usage = "[Youtube url or search query]"]
+#[aliases(p)]
 async fn play(ctx: &Context, msg: &Message, args: Args) -> CommandResult {
     let typing_res = msg.channel_id.start_typing(&ctx.http);
     let res = media::commands::play_command(&GLOBAL_MEDIA_PLAYER, ctx, msg, args, true).await;
@@ -245,6 +246,8 @@ async fn play(ctx: &Context, msg: &Message, args: Args) -> CommandResult {
 
 #[command]
 #[only_in(guilds)]
+#[description = "Plays a single song, ignoring playlists"]
+#[aliases("play-single", "ps")]
 async fn play_single(ctx: &Context, msg: &Message, args: Args) -> CommandResult {
     let typing_res = msg.channel_id.start_typing(&ctx.http);
     let res = media::commands::play_command(&GLOBAL_MEDIA_PLAYER, ctx, msg, args, false).await;
@@ -257,6 +260,7 @@ async fn play_single(ctx: &Context, msg: &Message, args: Args) -> CommandResult 
 }
 
 #[command]
+#[description = "Skips the current song"]
 #[only_in(guilds)]
 async fn skip(ctx: &Context, msg: &Message) -> CommandResult {
     media::commands::skip(&GLOBAL_MEDIA_PLAYER, ctx, msg).await
@@ -269,6 +273,8 @@ async fn seek(ctx: &Context, msg: &Message, args: Args) -> CommandResult {
 }
 
 #[command]
+#[description = "Shows the current song queue"]
+#[usage = "[page_no]"]
 #[only_in(guilds)]
 async fn queue(ctx: &Context, msg: &Message, args: Args) -> CommandResult {
     media::commands::queue(&GLOBAL_MEDIA_PLAYER, ctx, msg, args).await
