@@ -1,7 +1,7 @@
 use std::{fmt::Display, sync::Arc};
 
 use serenity::{
-    builder::{CreateEmbed, CreateMessage, ParseValue},
+    builder::{CreateEmbed, CreateInteractionResponseData, CreateMessage, ParseValue},
     http::Http,
     model::prelude::{ChannelId, GuildId, Message},
     prelude::Context,
@@ -91,6 +91,17 @@ impl MessageContext {
         m: &'b mut CreateMessage<'a>,
         message: impl Display,
     ) -> &'b mut CreateMessage<'a> {
+        m.content("").embed(|e| {
+            e.title("Info")
+                .description(&message)
+                .color(config::colors::info())
+        })
+    }
+
+    pub fn format_interaction_info<'a, 'b>(
+        m: &'b mut CreateInteractionResponseData<'a>,
+        message: impl Display,
+    ) -> &'b mut CreateInteractionResponseData<'a> {
         m.content("").embed(|e| {
             e.title("Info")
                 .description(&message)

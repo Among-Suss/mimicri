@@ -90,8 +90,13 @@ pub async fn play_history(ctx: &Context, msg: &Message, mut args: Args) -> Optio
 }
 
 pub mod interaction {
+    use serde_json::Value;
     use serenity::{
+        builder::{
+            CreateApplicationCommand, CreateApplicationCommandOption, CreateInteractionResponse,
+        },
         model::prelude::{
+            command::CommandOptionType,
             component::{ActionRowComponent, InputTextStyle},
             interaction::{
                 application_command::ApplicationCommandInteraction, modal::ModalSubmitInteraction,
@@ -103,97 +108,175 @@ pub mod interaction {
     use tracing::error;
 
     use crate::database::plugin::get_db_plugin;
+    use crate::utils::message_context::MessageContext;
 
-    pub mod playlist_create {
+    pub mod playlist {
         use super::*;
 
-        pub const COMMAND_NAME: &str = "playlist";
-        pub const SUBMIT_ID: &str = "createPlaylist.Modal";
+        pub const COMMAND: &str = "playlist";
 
-        pub async fn modal(ctx: Context, command: ApplicationCommandInteraction) {
-            if let Err(err) = command
-                .create_interaction_response(&ctx.http, |r| {
-                    r.kind(InteractionResponseType::Modal)
-                        .interaction_response_data(|m| {
-                            m.title("Create Playlist")
-                                .custom_id(SUBMIT_ID)
-                                .components(|c| {
-                                    c.create_action_row(|r| {
-                                        r.create_input_text(|i| {
-                                            i.custom_id("create_playlist.input")
-                                                .label("Playlist name:")
-                                                .style(InputTextStyle::Short)
+        pub fn register(c: &mut CreateApplicationCommand) -> &mut CreateApplicationCommand {
+            c.name(COMMAND)
+                .description("Create playlists to save your songs")
+                .create_option(|o| {
+                    o.name(create::SUB_COMMAND)
+                        .description("Create a playlist")
+                        .kind(CommandOptionType::SubCommand)
+                })
+                .create_option(|o| {
+                    o.name(list::SUB_COMMAND)
+                        .description("List your playlists")
+                        .kind(CommandOptionType::SubCommand)
+                })
+                .create_option(add::register)
+        }
+
+        pub mod create {
+            use super::*;
+
+            pub const SUB_COMMAND: &str = "create";
+            pub const SUBMIT_ID: &str = "createPlaylist.Modal";
+
+            pub async fn res(ctx: Context, interaction: &ApplicationCommandInteraction) {
+                let value_options = &interaction.data.options[0].options;
+
+                if &value_options.len() > &0 {
+                    if let Some(Value::String(playlist_name)) = &value_options[0].value {
+                        if let Some(db_plugin) = get_db_plugin(&ctx).await {
+                            let _ = db_plugin.create_playlist(interaction.user.id, playlist_name);
+
+                            if let Err(err) = interaction
+                                .create_interaction_response(&ctx.http, |r| {
+                                    format_playlist_response(r, playlist_name)
+                                })
+                                .await
+                            {
+                                error!("Unable to submit playlist modal: {:?}", err);
+                            }
+                        }
+                    }
+                } else if let Err(err) = &interaction
+                    .create_interaction_response(&ctx.http, |r| {
+                        r.kind(InteractionResponseType::Modal)
+                            .interaction_response_data(|m| {
+                                m.title("Create Playlist")
+                                    .custom_id(SUBMIT_ID)
+                                    .components(|c| {
+                                        c.create_action_row(|r| {
+                                            r.create_input_text(|i| {
+                                                i.custom_id("create_playlist.input")
+                                                    .label("Playlist name:")
+                                                    .style(InputTextStyle::Short)
+                                            })
                                         })
                                     })
-                                })
-                        })
-                })
-                .await
-            {
-                error!("Unable to create playlist modal: {:?}", err);
+                            })
+                    })
+                    .await
+                {
+                    error!("Unable to create playlist modal: {:?}", err);
+                }
+            }
+
+            pub async fn submit(ctx: Context, interaction: ModalSubmitInteraction) {
+                if let ActionRowComponent::InputText(input) =
+                    &interaction.data.components[0].components[0]
+                {
+                    let playlist_name = &input.value;
+
+                    if let Some(db_plugin) = get_db_plugin(&ctx).await {
+                        let _ = db_plugin.create_playlist(interaction.user.id, playlist_name);
+
+                        if let Err(err) = interaction
+                            .create_interaction_response(&ctx.http, |r| {
+                                format_playlist_response(r, playlist_name)
+                            })
+                            .await
+                        {
+                            error!("Unable to submit playlist modal: {:?}", err);
+                        }
+                    }
+                }
+            }
+
+            fn format_playlist_response<'a, 'b>(
+                r: &'b mut CreateInteractionResponse<'a>,
+                playlist_name: &String,
+            ) -> &'b mut CreateInteractionResponse<'a> {
+                r.kind(InteractionResponseType::ChannelMessageWithSource)
+                    .interaction_response_data(|d| {
+                        MessageContext::format_interaction_info(
+                            d,
+                            format!("Created playlist: {}", playlist_name),
+                        )
+                    })
             }
         }
 
-        pub async fn submit(ctx: Context, interaction: ModalSubmitInteraction) {
-            if let ActionRowComponent::InputText(input) =
-                &interaction.data.components[0].components[0]
-            {
-                let playlist_name = &input.value;
+        pub mod list {
+            use super::*;
 
+            pub const SUB_COMMAND: &str = "list";
+
+            pub async fn res(ctx: Context, command: &ApplicationCommandInteraction) {
                 if let Some(db_plugin) = get_db_plugin(&ctx).await {
-                    let _ = db_plugin.create_playlist(interaction.user.id, playlist_name);
-
-                    if let Err(err) = interaction
-                        .create_interaction_response(&ctx.http, |r| {
-                            r.kind(InteractionResponseType::ChannelMessageWithSource)
-                                .interaction_response_data(|d| {
-                                    d.content(format!("Created playlist: {}", playlist_name))
-                                })
-                        })
-                        .await
-                    {
-                        error!("Unable to submit playlist modal: {:?}", err);
+                    if let Ok(playlists) = db_plugin.get_playlists(command.user.id, 10, 0) {
+                        if let Err(err) = command
+                            .create_interaction_response(&ctx.http, |r| {
+                                r.kind(InteractionResponseType::ChannelMessageWithSource)
+                                    .interaction_response_data(|d| {
+                                        d.embed(|e| {
+                                            e.title(format!("{}'s playlists", command.user.name))
+                                                .description(if !playlists.is_empty() {
+                                                    playlists
+                                                        .into_iter()
+                                                        .enumerate()
+                                                        .map(|(i, playlist)| {
+                                                            format!("{}. **{}**", i + 1, playlist)
+                                                        })
+                                                        .collect::<Vec<String>>()
+                                                        .join("\n")
+                                                } else {
+                                                    format!("You don't have any playlists yet.")
+                                                })
+                                        })
+                                    })
+                            })
+                            .await
+                        {
+                            error!("Unable to create playlist modal: {:?}", err);
+                        }
                     }
                 }
             }
         }
-    }
 
-    pub mod playlist_list {
-        use super::*;
+        pub mod add {
+            use super::*;
 
-        pub const COMMAND_NAME: &str = "list-playlist";
+            pub const SUB_COMMAND: &str = "add";
 
-        pub async fn response(ctx: Context, command: ApplicationCommandInteraction) {
-            if let Some(db_plugin) = get_db_plugin(&ctx).await {
-                if let Ok(playlists) = db_plugin.get_playlists(command.user.id, 10, 0) {
-                    if let Err(err) = command
-                        .create_interaction_response(&ctx.http, |r| {
-                            r.kind(InteractionResponseType::ChannelMessageWithSource)
-                                .interaction_response_data(|d| {
-                                    d.embed(|e| {
-                                        e.title(format!("{}'s playlists", command.user.name))
-                                            .description(if !playlists.is_empty() {
-                                                playlists
-                                                    .into_iter()
-                                                    .enumerate()
-                                                    .map(|(i, playlist)| {
-                                                        format!("{}. **{}**", i + 1, playlist)
-                                                    })
-                                                    .collect::<Vec<String>>()
-                                                    .join("\n")
-                                            } else {
-                                                format!("You don't have any playlists yet.")
-                                            })
-                                    })
-                                })
-                        })
-                        .await
-                    {
-                        error!("Unable to create playlist modal: {:?}", err);
-                    }
-                }
+            pub fn register(
+                c: &mut CreateApplicationCommandOption,
+            ) -> &mut CreateApplicationCommandOption {
+                c.name(SUB_COMMAND)
+                    .kind(CommandOptionType::SubCommand)
+                    .description("Add a song to a playlist.")
+                    .create_sub_option(|o| {
+                        o.name("playlist")
+                            .description("Playlist to add the song to")
+                            .kind(CommandOptionType::String)
+                            .required(false)
+                    })
+                    .create_sub_option(|o| {
+                        o.name("song")
+                            .description("Song url or search query to add to playlist")
+                            .kind(CommandOptionType::String)
+                            .required(false)
+                    })
             }
+
+            pub async fn res(_ctx: Context, _command: &ApplicationCommandInteraction) {}
         }
     }
 }

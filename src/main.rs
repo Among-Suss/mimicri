@@ -6,13 +6,6 @@ mod utils;
 
 use dotenv::dotenv;
 use media::global_media_player::GlobalMediaPlayer;
-use std::{collections::HashSet, env, sync::Arc};
-use tracing::info;
-use tracing_subscriber::{fmt, layer::SubscriberExt};
-use utils::{config, message_context};
-
-use songbird::SerenityInit;
-
 use serenity::{
     async_trait,
     builder::CreateApplicationCommands,
@@ -27,10 +20,15 @@ use serenity::{
     },
     model::{
         channel::Message,
-        prelude::{command::Command, interaction::Interaction, GuildId, Ready, UserId},
+        prelude::{interaction::Interaction, Ready, UserId},
     },
     prelude::{EventHandler, GatewayIntents},
 };
+use songbird::SerenityInit;
+use std::{collections::HashSet, env, sync::Arc};
+use tracing::{info, warn};
+use tracing_subscriber::{fmt, layer::SubscriberExt};
+use utils::{config, message_context};
 
 use crate::{
     database::{plugin::DatabasePluginInit, sqlite_plugin::SQLitePlugin},
@@ -42,31 +40,34 @@ struct Handler;
 #[async_trait]
 impl EventHandler for Handler {
     async fn ready(&self, ctx: Context, ready: Ready) {
-        info!("{} is connected!", ready.user.name);
-
         // Register application commands
         if cfg!(debug_assertions) {
-            if let Ok(guild_id) = env::var("DEBUG_GUILD_ID") {
-                let _ = GuildId::set_application_commands(
-                    &GuildId(
-                        guild_id
-                            .parse()
-                            .expect("DEBUG_GUILD_ID must be an integer!"),
-                    ),
-                    &ctx.http,
-                    register_interactions,
-                )
-                .await;
+            if let Ok(guild_id_str) = env::var("DEBUG_GUILD_ID") {
+                let guild_id = guild_id_str
+                    .parse()
+                    .expect("DEBUG_GUILD_ID must be an integer!");
+
+                let guild = ctx.http.get_guild(guild_id).await.unwrap();
+
+                info!(
+                    "Debug Guild ID detected. Setting guild scoped interactions to '{}'",
+                    guild.name
+                );
+
+                guild
+                    .set_application_commands(&ctx.http, register_interactions)
+                    .await
+                    .expect("Unable to set application commands");
             }
         } else {
-            let _ =
-                Command::set_global_application_commands(&ctx.http, register_interactions).await;
+            // Command::set_global_application_commands(&ctx.http, register_interactions)
+            //     .await
+            //     .expect("Unable to set application commands");
         };
 
-        // Debug Channel
+        // Send startup message
         if let Ok(debug_channel) = env::var("DEBUG_CHANNEL_ID") {
-            let _ = ctx
-                .http
+            ctx.http
                 .get_channel(
                     debug_channel
                         .parse::<u64>()
@@ -83,8 +84,11 @@ impl EventHandler for Handler {
                         env!("VERGEN_GIT_SEMVER")
                     ),
                 )
-                .await;
+                .await
+                .ok();
         }
+
+        info!("{} is connected!", ready.user.name);
     }
 
     async fn interaction_create(&self, ctx: Context, interaction: Interaction) {
@@ -94,29 +98,29 @@ impl EventHandler for Handler {
 
 /// Register slash commands
 fn register_interactions(f: &mut CreateApplicationCommands) -> &mut CreateApplicationCommands {
-    use database::commands::interaction::{
-        playlist_create::COMMAND_NAME as CREATE_PLAYLIST_ID,
-        playlist_list::COMMAND_NAME as LIST_PLAYLIST_ID,
-    };
+    use database::commands::interaction::playlist;
 
-    f.create_application_command(|c| c.name(CREATE_PLAYLIST_ID).description("Create a playlist"))
-        .create_application_command(|c| c.name(LIST_PLAYLIST_ID).description("List of playlists"))
+    f.create_application_command(playlist::register)
 }
 
 /// Slash command event handler
 async fn on_interaction(ctx: Context, interaction: Interaction) {
-    use database::commands::interaction::{playlist_create, playlist_list};
+    use database::commands::interaction::playlist;
 
     match interaction {
         Interaction::ApplicationCommand(command) => {
             match command.data.name.as_str() {
-                playlist_create::COMMAND_NAME => playlist_create::modal(ctx, command).await,
-                playlist_list::COMMAND_NAME => playlist_list::response(ctx, command).await,
-                &_ => (),
+                playlist::COMMAND => match command.data.options[0].name.as_str() {
+                    playlist::create::SUB_COMMAND => playlist::create::res(ctx, &command).await,
+                    playlist::list::SUB_COMMAND => playlist::list::res(ctx, &command).await,
+                    playlist::add::SUB_COMMAND => playlist::add::res(ctx, &command).await,
+                    &_ => warn!("{:?}", command.data.options[0].name),
+                },
+                &_ => warn!("Unknown application command: {:?}", command.data.name),
             };
         }
         Interaction::ModalSubmit(modal_inter) => match modal_inter.data.custom_id.as_str() {
-            playlist_create::SUBMIT_ID => playlist_create::submit(ctx, modal_inter).await,
+            playlist::create::SUBMIT_ID => playlist::create::submit(ctx, modal_inter).await,
             &_ => (),
         },
         _ => (),
