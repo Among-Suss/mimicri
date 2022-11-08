@@ -1,5 +1,3 @@
-pub mod commands;
-
 use std::env;
 
 use ansi_term::Color;

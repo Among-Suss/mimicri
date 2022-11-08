@@ -4,12 +4,12 @@ use serenity::{
     builder::{CreateEmbed, CreateInteractionResponseData, CreateMessage, ParseValue},
     http::Http,
     model::prelude::{ChannelId, GuildId, Message},
-    prelude::Context,
+    prelude::Context as SerenityContext,
     Result as SerenityResult,
 };
 use tracing::error;
 
-use crate::{config, media::media_info::MediaInfo};
+use crate::{config, media::media_info::MediaInfo, Context};
 
 use super::strings;
 
@@ -27,8 +27,17 @@ impl Clone for MessageContext {
     }
 }
 
+impl From<Context<'_>> for MessageContext {
+    fn from(ctx: Context<'_>) -> Self {
+        MessageContext {
+            channel: ctx.channel_id(),
+            http: ctx.discord().http.clone(),
+        }
+    }
+}
+
 impl MessageContext {
-    pub fn new(ctx: &Context, msg: &Message) -> MessageContext {
+    pub fn new(ctx: &SerenityContext, msg: &Message) -> MessageContext {
         MessageContext {
             channel: msg.channel_id,
             http: ctx.http.clone(),

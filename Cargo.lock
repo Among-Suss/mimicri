@@ -348,17 +348,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "command_attr"
-version = "0.4.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4d999d4e7731150ee14aee8f619c7a9aa9a4385bca0606c4fa95aa2f36a05d9a"
-dependencies = [
- "proc-macro2",
- "quote",
- "syn",
-]
-
-[[package]]
 name = "concurrent-queue"
 version = "1.2.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -476,6 +465,41 @@ version = "0.1.23"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cdffe87e1d521a10f9696f833fe502293ea446d7f256c06128293a4119bdf4cb"
 dependencies = [
+ "quote",
+ "syn",
+]
+
+[[package]]
+name = "darling"
+version = "0.14.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b0dd3cd20dc6b5a876612a6e5accfe7f3dd883db6d07acfbf14c128f61550dfa"
+dependencies = [
+ "darling_core",
+ "darling_macro",
+]
+
+[[package]]
+name = "darling_core"
+version = "0.14.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a784d2ccaf7c98501746bf0be29b2022ba41fd62a2e622af997a03e9f972859f"
+dependencies = [
+ "fnv",
+ "ident_case",
+ "proc-macro2",
+ "quote",
+ "strsim",
+ "syn",
+]
+
+[[package]]
+name = "darling_macro"
+version = "0.14.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7618812407e9402654622dd402b0a89dff9ba93badd6540781526117b92aab7e"
+dependencies = [
+ "darling_core",
  "quote",
  "syn",
 ]
@@ -918,6 +942,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "ident_case"
+version = "1.0.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b9e0384b61958566e926dc50660321d12159025e767c18e043daf26b70104c39"
+
+[[package]]
 name = "idna"
 version = "0.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -990,12 +1020,6 @@ name = "lazy_static"
 version = "1.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e2abad23fbc42b3700f2f279844dc832adb2b2eb069b2df918f455c4e18cc646"
-
-[[package]]
-name = "levenshtein"
-version = "1.0.5"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "db13adb97ab515a3691f56e4dbab09283d0b86cb45abd991d8634a9d6f501760"
 
 [[package]]
 name = "libc"
@@ -1111,6 +1135,7 @@ dependencies = [
  "async-std",
  "crossbeam",
  "dotenv",
+ "poise",
  "regex",
  "serde",
  "serde_json",
@@ -1347,6 +1372,37 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d4714e10f30cab023005adce048f2d30dd4ac4f093662abf2220855655ef8f90"
 dependencies = [
  "pnet_base",
+]
+
+[[package]]
+name = "poise"
+version = "0.4.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "aee439543df35482730552e7c9ed0c45a5f1d521548e6c0249967c4ba8828f60"
+dependencies = [
+ "async-trait",
+ "derivative",
+ "futures-core",
+ "futures-util",
+ "log",
+ "once_cell",
+ "parking_lot",
+ "poise_macros",
+ "regex",
+ "serenity",
+ "tokio",
+]
+
+[[package]]
+name = "poise_macros"
+version = "0.4.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "53d21213ff7aeef5ab69729a5cddfb351a84a9bf3dadf9f470032440d43746c2"
+dependencies = [
+ "darling",
+ "proc-macro2",
+ "quote",
+ "syn",
 ]
 
 [[package]]
@@ -1700,26 +1756,23 @@ dependencies = [
  "bytes",
  "cfg-if",
  "chrono",
- "command_attr",
  "dashmap",
  "flate2",
  "futures",
- "levenshtein",
  "mime",
  "mime_guess",
  "parking_lot",
  "percent-encoding",
  "reqwest",
+ "rustversion",
  "serde",
  "serde-value",
  "serde_json",
- "static_assertions",
  "time",
  "tokio",
  "tracing",
  "typemap_rev",
  "url",
- "uwl",
 ]
 
 [[package]]
@@ -1904,12 +1957,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "static_assertions"
-version = "1.1.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a2eb9349b6444b326872e140eb1cf5e7c522154d69e7a0ffb0fb81c06b37543f"
-
-[[package]]
 name = "streamcatcher"
 version = "1.0.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1919,6 +1966,12 @@ dependencies = [
  "futures-util",
  "loom",
 ]
+
+[[package]]
+name = "strsim"
+version = "0.10.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "73473c0e59e6d5812c5dfe2a064a6444949f089e20eec9a2e5506596494e4623"
 
 [[package]]
 name = "subtle"
@@ -2291,12 +2344,6 @@ checksum = "bc5cf98d8186244414c848017f0e2676b3fcb46807f6668a97dfe67359a3c4b7"
 dependencies = [
  "getrandom",
 ]
-
-[[package]]
-name = "uwl"
-version = "0.6.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f4bf03e0ca70d626ecc4ba6b0763b934b6f2976e8c744088bb3c1d646fbb1ad0"
 
 [[package]]
 name = "valuable"
