@@ -66,6 +66,7 @@ async fn main() {
                 deafen(),
                 undeafen(),
                 help(),
+                version(),
                 register(),
             ],
             prefix_options: poise::PrefixFrameworkOptions {
@@ -74,7 +75,7 @@ async fn main() {
             },
             ..Default::default()
         })
-        .user_data_setup(move |ctx, _ready, framework| Box::pin(async move { Ok(UserData {}) }))
+        .user_data_setup(move |_ctx, _ready, _framework| Box::pin(async move { Ok(UserData {}) }))
         .client_settings(|c| c.register_songbird().register_database_plugin(db_plugin))
         .token(std::env::var("DISCORD_TOKEN").expect("missing DISCORD_TOKEN"))
         .intents(intents);
@@ -233,6 +234,13 @@ async fn log_file(ctx: Context<'_>) -> Result<(), Error> {
 }
 
 // Help
+#[poise::command(slash_command, prefix_command, aliases("v"), category = "debug")]
+async fn version(ctx: Context<'_>) -> Result<(), Error> {
+    ctx.info(format!("Version: {}", env!("VERGEN_GIT_SEMVER")))
+        .await;
+
+    Ok(())
+}
 
 #[poise::command(prefix_command, track_edits, slash_command)]
 async fn help(
