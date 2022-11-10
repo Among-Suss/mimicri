@@ -1,19 +1,10 @@
 use std::path::Path;
 
-use serenity::{
-    framework::standard::{Args, CommandResult},
-    model::prelude::{AttachmentType, Message},
-    prelude::Context,
-};
+use serenity::model::prelude::AttachmentType;
 
-use crate::utils::message_context::MessageContext;
+use crate::{utils::responses::Responses, CommandResult, Context};
 
-pub async fn log(ctx: &Context, msg: &Message, args: Args) -> CommandResult {
-    let msg_ctx = MessageContext {
-        channel: msg.channel_id,
-        http: ctx.http.clone(),
-    };
-
+pub async fn log(ctx: Context<'_>, args: &String) -> CommandResult {
     let mut level = "".to_string();
     let mut target = "".to_string();
     let mut from: usize = 0;
@@ -22,9 +13,9 @@ pub async fn log(ctx: &Context, msg: &Message, args: Args) -> CommandResult {
     let mut target_flag = false;
     let mut from_flag = false;
 
-    for arg in args.raw() {
+    for arg in args.split(" ") {
         if arg == "-h" || arg == "--help" {
-            msg_ctx.send_info(super::format_help_message()).await;
+            ctx.info(super::format_help_message()).await;
 
             return Ok(());
         } else if arg == "-l" || arg == "--level" {
@@ -48,25 +39,22 @@ pub async fn log(ctx: &Context, msg: &Message, args: Args) -> CommandResult {
     let log_msgs = super::get_logs(level, target, from).await;
 
     if !log_msgs.1.is_empty() {
-        msg_ctx.send_error(log_msgs.1).await;
+        ctx.error(log_msgs.1).await;
     }
 
-    msg_ctx
-        .send_message(|m| MessageContext::format_reply(m.content(log_msgs.0), msg, false))
-        .await;
+    ctx.send(|m| m.content(log_msgs.0))
+        .await
+        .expect("Failed to send message");
 
     Ok(())
 }
 
-pub async fn log_file(ctx: &Context, msg: &Message) -> CommandResult {
+pub async fn log_file(ctx: Context<'_>) -> CommandResult {
     let log_file = super::get_log_filename();
 
-    let _ = msg
-        .channel_id
-        .send_message(&ctx.http, |m| {
-            m.files(vec![AttachmentType::Path(Path::new(&log_file))])
-        })
-        .await;
+    ctx.send(|m| m.attachment(AttachmentType::Path(Path::new(&log_file))))
+        .await
+        .expect("Failed to send message");
 
     Ok(())
 }

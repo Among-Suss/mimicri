@@ -1,3 +1,4 @@
+#![allow(dead_code)]
 use std::{fmt::Display, sync::Arc};
 
 use serenity::{

@@ -1,13 +1,9 @@
-use tracing::info;
-
 use crate::{
     media::global_media_player::GlobalMediaPlayer, utils::responses::Responses, CommandResult,
     Context,
 };
 
 pub async fn join(media_player: &GlobalMediaPlayer, ctx: Context<'_>) -> CommandResult {
-    info!("Joining...");
-
     let guild = ctx.guild().unwrap();
     let guild_id = guild.id;
 

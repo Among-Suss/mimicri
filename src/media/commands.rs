@@ -4,7 +4,12 @@ use tracing::{error, warn};
 use crate::{
     controls::commands::join,
     database::plugin::get_db_plugin,
-    utils::{config, message_context::MessageContext, responses::Responses, strings},
+    utils::{
+        config,
+        message_context::MessageContext,
+        responses::{self, Responses},
+        strings,
+    },
     CommandResult, Context,
 };
 
@@ -257,7 +262,7 @@ pub async fn queue(
 
             ctx.send(|m| {
                 m.content("").embed(|e| {
-                    MessageContext::format_embed_playlist(e, queue.iter(), len, guild_id, page)
+                    responses::format_embed_playlist(e, queue.iter(), len, guild_id, page)
                         .title("Queue")
                         .color(config::colors::queue())
                 })

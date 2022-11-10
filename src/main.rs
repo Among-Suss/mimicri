@@ -53,7 +53,11 @@ async fn main() {
                 queue(),
                 now_playing(),
                 timestamp(),
+                history(),
+                play_history(),
                 seek(),
+                log(),
+                log_file(),
                 skip(),
                 join(),
                 leave(),
@@ -133,6 +137,45 @@ async fn timestamp(ctx: Context<'_>) -> Result<(), Error> {
     media::commands::timestamp(&GLOBAL_MEDIA_PLAYER, ctx).await
 }
 
+// Playlists
+#[poise::command(slash_command, prefix_command, category = "playlists")]
+async fn history(
+    ctx: Context<'_>,
+    #[description = "Page #"] page: Option<i64>,
+) -> Result<(), Error> {
+    let page = page.unwrap_or_default();
+
+    if page < 0 {
+        ctx.error("Page cannot be less than 0").await;
+        return Ok(());
+    }
+
+    database::commands::history(ctx, page as usize).await
+}
+
+#[poise::command(
+    slash_command,
+    prefix_command,
+    aliases("play-history"),
+    category = "playlists"
+)]
+async fn play_history(
+    ctx: Context<'_>,
+    #[description = "Index #"] index: i64,
+) -> Result<(), Error> {
+    if index < 0 {
+        ctx.error("Index cannot be less than 0").await;
+        return Ok(());
+    }
+
+    let song = database::commands::get_history(ctx, index as usize).await;
+    if let Some(song) = song {
+        return media::commands::play_command(&GLOBAL_MEDIA_PLAYER, ctx, &song, false).await;
+    }
+
+    Ok(())
+}
+
 // Controls
 
 #[poise::command(slash_command, prefix_command, category = "controls")]
@@ -165,6 +208,20 @@ async fn undeafen(ctx: Context<'_>) -> Result<(), Error> {
     controls::commands::undeafen(&ctx).await
 }
 
+// Logging
+#[poise::command(slash_command, prefix_command, category = "debug")]
+async fn log(
+    ctx: Context<'_>,
+    #[description = "Arguments"] args: Option<String>,
+) -> Result<(), Error> {
+    logging::commands::log(ctx, &args.unwrap_or_default()).await
+}
+
+#[poise::command(slash_command, prefix_command, aliases("log-file"), category = "debug")]
+async fn log_file(ctx: Context<'_>) -> Result<(), Error> {
+    logging::commands::log_file(ctx).await
+}
+
 // Help
 
 #[poise::command(prefix_command, track_edits, slash_command)]
@@ -178,9 +235,7 @@ async fn help(
         ctx,
         command.as_deref(),
         poise::builtins::HelpConfiguration {
-            extra_text_at_bottom: "\
-This is an example bot made to showcase features of my custom Discord bot framework",
-            show_context_menu_commands: true,
+            // show_context_menu_commands: true,
             ..Default::default()
         },
     )
