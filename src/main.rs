@@ -66,6 +66,7 @@ async fn main() {
                 deafen(),
                 undeafen(),
                 help(),
+                register(),
             ],
             prefix_options: poise::PrefixFrameworkOptions {
                 prefix: env::var("BOT_PREFIX").ok(),
@@ -73,12 +74,20 @@ async fn main() {
             },
             ..Default::default()
         })
-        .user_data_setup(move |_ctx, _ready, _framework| Box::pin(async move { Ok(UserData {}) }))
+        .user_data_setup(move |ctx, _ready, framework| Box::pin(async move { Ok(UserData {}) }))
         .client_settings(|c| c.register_songbird().register_database_plugin(db_plugin))
         .token(std::env::var("DISCORD_TOKEN").expect("missing DISCORD_TOKEN"))
         .intents(intents);
 
     framework.run().await.unwrap();
+}
+
+/// Registers or unregisters application commands in this guild or globally
+#[poise::command(prefix_command, hide_in_help)]
+async fn register(ctx: Context<'_>) -> Result<(), Error> {
+    poise::builtins::register_application_commands_buttons(ctx).await?;
+
+    Ok(())
 }
 
 // Media
@@ -138,6 +147,7 @@ async fn timestamp(ctx: Context<'_>) -> Result<(), Error> {
 }
 
 // Playlists
+
 #[poise::command(slash_command, prefix_command, category = "playlists")]
 async fn history(
     ctx: Context<'_>,
