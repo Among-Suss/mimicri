@@ -25,8 +25,6 @@ impl MediaEventHandler {
 pub struct MediaItem {
     pub info: MediaInfo,
     pub message_ctx: MessageContext,
-
-    pub on_play: fn(info: MediaInfo),
 }
 
 pub struct MediaQueue {
@@ -330,11 +328,9 @@ impl ChannelMediaPlayer {
 
         let mut smq_locked = shared_media_queue_lock.lock().await;
 
-        smq_locked.queue.push_front(Some(MediaItem {
-            info,
-            message_ctx,
-            on_play: |_| {},
-        }));
+        smq_locked
+            .queue
+            .push_front(Some(MediaItem { info, message_ctx }));
 
         shared_media_queue_condvar.notify_one();
     }
@@ -357,7 +353,6 @@ impl ChannelMediaPlayer {
             smq_locked.queue.push_front(Some(MediaItem {
                 info: media_info,
                 message_ctx: message_ctx.clone(),
-                on_play: |_| {},
             }));
         }
 
