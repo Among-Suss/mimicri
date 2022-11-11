@@ -3,6 +3,7 @@ name = "mimicri"
 version = "0.9.3"
 edition = "2021"
 build = "build.rs"
+rust-version = "1.65.0"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
