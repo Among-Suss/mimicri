@@ -40,15 +40,28 @@ DISCORD_TOKEN = *your bot token*
 BOT_PREFIX = *bot prefix*
 
 # Optional
-LOG_FILE = output.log
 SQLITE_DB = db.sqlite
+
+# Debug
+LOG_FILE = output.log
+DEBUG_CHANNEL_ID = *channel id*
+DEBUG_GUILD_ID = *guild id*
 ```
 
 Alternatively, you can just set the environment variables before running.
 
+| Variable           | Description                                                                |
+| ------------------ | -------------------------------------------------------------------------- |
+| `DISCORD_TOKEN`    | Required for bot to run                                                    |
+| `BOT_PREFIX`       | Prefix for message commands                                                |
+| `SQLITE_DB`        | Path to sqlite db file. If not present, playlist commands will be disabled |
+| `LOG_FILE`         | Path to log file. If not present, log commands will be disabled            |
+| `DEBUG_CHANNEL_ID` | Integer ID of channel to send startup message to for debugging             |
+| `DEBUG_GUILD_ID`   | Integer ID of guild to manually register commands to for debugging         |
+
 ## Running
 
-Make sure to set the required environment variables.
+Make sure to set the required environment variables above.
 
 For basic debugging, run:
 
@@ -67,9 +80,7 @@ cargo build --release
 Use the `publish.py` python script to automatically update the version and push to remote. To do that, commit all your changes, and run the script below:
 
 ```sh
-./publish.py bump --type patch --push #Type can be patch, minor, or major
+./publish.py bump -t patch #Type can be patch, minor, or major
 ```
 
 The bump command does 3 things: bump the version on cargo, create a new commit containing only the bump, and tag the commit. With the `--push` flag, it will also automatically push to remote, triggering a workflow. You can run `./publish.py --help` to check out other tools and options.
-
-

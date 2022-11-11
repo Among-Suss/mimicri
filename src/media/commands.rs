@@ -24,6 +24,10 @@ pub async fn play_command(
     url: &String,
     allow_playlist: bool,
 ) -> CommandResult {
+    ctx.defer_ephemeral()
+        .await
+        .expect("Failed to defer message");
+
     let guild = ctx.guild().unwrap();
 
     let author_id = ctx.author().id;
