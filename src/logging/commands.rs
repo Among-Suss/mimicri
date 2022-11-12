@@ -1,10 +1,12 @@
 use std::path::Path;
 
+use poise::command;
 use serenity::model::prelude::AttachmentType;
 
 use crate::{utils::responses::Responses, CommandResult, Context};
 
-pub async fn log(ctx: Context<'_>, args: &String) -> CommandResult {
+#[command(slash_command, prefix_command, category = "debug")]
+pub async fn log(ctx: Context<'_>, #[rest] args: String) -> CommandResult {
     let mut level = "".to_string();
     let mut target = "".to_string();
     let mut from: usize = 0;
@@ -49,6 +51,7 @@ pub async fn log(ctx: Context<'_>, args: &String) -> CommandResult {
     Ok(())
 }
 
+#[command(slash_command, prefix_command, rename = "log-file", category = "debug")]
 pub async fn log_file(ctx: Context<'_>) -> CommandResult {
     let log_file = super::get_log_filename();
 

@@ -114,15 +114,15 @@ async fn main() {
                 history(),
                 play_history(),
                 seek(),
-                log(),
-                log_file(),
                 skip(),
                 join(),
                 leave(),
-                mute(),
-                unmute(),
-                deafen(),
-                undeafen(),
+                controls::commands::mute(),
+                controls::commands::unmute(),
+                controls::commands::deafen(),
+                controls::commands::undeafen(),
+                logging::commands::log(),
+                logging::commands::log_file(),
                 help(),
                 version(),
                 register(),
@@ -259,44 +259,12 @@ async fn play_history(
 
 #[command(slash_command, prefix_command, category = "controls")]
 async fn join(ctx: Context<'_>) -> CommandResult {
-    controls::commands::join(&GLOBAL_MEDIA_PLAYER, ctx).await
+    controls::join(&GLOBAL_MEDIA_PLAYER, ctx).await
 }
 
 #[command(slash_command, prefix_command, category = "controls")]
 async fn leave(ctx: Context<'_>) -> CommandResult {
-    controls::commands::leave(&GLOBAL_MEDIA_PLAYER, &ctx).await
-}
-
-#[command(slash_command, prefix_command, category = "controls")]
-async fn mute(ctx: Context<'_>) -> CommandResult {
-    controls::commands::mute(&ctx).await
-}
-
-#[command(slash_command, prefix_command, category = "controls")]
-async fn unmute(ctx: Context<'_>) -> CommandResult {
-    controls::commands::unmute(&ctx).await
-}
-
-#[command(slash_command, prefix_command, category = "controls")]
-async fn deafen(ctx: Context<'_>) -> CommandResult {
-    controls::commands::deafen(&ctx).await
-}
-
-#[command(slash_command, prefix_command, category = "controls")]
-async fn undeafen(ctx: Context<'_>) -> CommandResult {
-    controls::commands::undeafen(&ctx).await
-}
-
-// Logging
-
-#[command(slash_command, prefix_command, category = "debug")]
-async fn log(ctx: Context<'_>, #[description = "Arguments"] args: Option<String>) -> CommandResult {
-    logging::commands::log(ctx, &args.unwrap_or_default()).await
-}
-
-#[command(slash_command, prefix_command, aliases("log-file"), category = "debug")]
-async fn log_file(ctx: Context<'_>) -> CommandResult {
-    logging::commands::log_file(ctx).await
+    controls::leave(&GLOBAL_MEDIA_PLAYER, ctx).await
 }
 
 // Misc and tools
