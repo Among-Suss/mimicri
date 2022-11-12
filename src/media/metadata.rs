@@ -210,7 +210,7 @@ mod tests {
             .unwrap();
 
             assert!(sources.len() > 0);
-            for source in sources.iter() {
+            for source in sources {
                 assert!(!source.url.is_empty())
             }
         }
@@ -223,7 +223,7 @@ mod tests {
             .unwrap();
 
             assert!(sources.len() > 0);
-            for source in sources.iter() {
+            for source in sources {
                 assert!(!source.url.is_empty())
             }
         }

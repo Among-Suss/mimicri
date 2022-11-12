@@ -28,7 +28,12 @@ static GLOBAL_MEDIA_PLAYER: GlobalMediaPlayer = GlobalMediaPlayer::UNINITIALIZED
 #[tokio::main(flavor = "multi_thread", worker_threads = 4)]
 async fn main() {
     dotenv().ok();
+    // CLI tools
+    if let Some(exit_code) = utils::cli::parse_args().await {
+        std::process::exit(exit_code);
+    }
 
+    // Init Bot
     GLOBAL_MEDIA_PLAYER.init_self().await;
 
     // Logging
@@ -49,35 +54,8 @@ async fn main() {
     let db_plugin = Arc::new(SQLitePlugin::default());
 
     let framework = poise::Framework::builder()
-        .options(poise::FrameworkOptions {
-            commands: vec![
-                play(),
-                play_single(),
-                queue(),
-                now_playing(),
-                timestamp(),
-                history(),
-                play_history(),
-                seek(),
-                log(),
-                log_file(),
-                skip(),
-                join(),
-                leave(),
-                mute(),
-                unmute(),
-                deafen(),
-                undeafen(),
-                help(),
-                version(),
-                register(),
-            ],
-            prefix_options: poise::PrefixFrameworkOptions {
-                prefix: env::var("BOT_PREFIX").ok(),
-                ..Default::default()
-            },
-            ..Default::default()
-        })
+        .client_settings(|c| c.register_songbird().register_database_plugin(db_plugin))
+        .token(std::env::var("DISCORD_TOKEN").expect("missing DISCORD_TOKEN"))
         .user_data_setup(move |ctx, _ready, framework| {
             Box::pin(async move {
                 // Debug Guild
@@ -126,20 +104,56 @@ async fn main() {
                 Ok(UserData {})
             })
         })
-        .client_settings(|c| c.register_songbird().register_database_plugin(db_plugin))
-        .token(std::env::var("DISCORD_TOKEN").expect("missing DISCORD_TOKEN"))
+        .options(poise::FrameworkOptions {
+            commands: vec![
+                play_prefix(),
+                play_slash(),
+                play_single(),
+                queue(),
+                now_playing(),
+                timestamp(),
+                history(),
+                play_history(),
+                seek(),
+                log(),
+                log_file(),
+                skip(),
+                join(),
+                leave(),
+                mute(),
+                unmute(),
+                deafen(),
+                undeafen(),
+                help(),
+                version(),
+                register(),
+            ],
+            prefix_options: poise::PrefixFrameworkOptions {
+                prefix: env::var("BOT_PREFIX").ok(),
+                ..Default::default()
+            },
+            ..Default::default()
+        })
         .intents(intents);
 
     framework.run().await.unwrap();
 }
 
 // Media
-#[poise::command(slash_command, prefix_command, aliases("p"), category = "media")]
-async fn play(
+#[poise::command(prefix_command, rename = "play", aliases("p"), category = "media")]
+async fn play_prefix(
     ctx: Context<'_>,
     #[description = "Query or url"] song: Vec<String>,
 ) -> Result<(), Error> {
     media::commands::play_command(&GLOBAL_MEDIA_PLAYER, ctx, &song.join(" "), true).await
+}
+
+#[poise::command(slash_command, rename = "play", aliases("p"), category = "media")]
+async fn play_slash(
+    ctx: Context<'_>,
+    #[description = "Query or url"] song: String,
+) -> Result<(), Error> {
+    media::commands::play_command(&GLOBAL_MEDIA_PLAYER, ctx, &song, true).await
 }
 
 #[poise::command(
