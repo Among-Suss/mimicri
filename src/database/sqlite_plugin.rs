@@ -212,6 +212,10 @@ impl DatabasePlugin for SQLitePlugin {
             .expect("[sqlite] Unable to init database");
     }
 
+    fn disabled(&self) -> bool {
+        self.is_disabled()
+    }
+
     fn create_playlist(&self, user_id: UserId, name: &String) -> Result<(), DBError> {
         if self.is_disabled() {
             return Ok(());
@@ -381,7 +385,9 @@ impl DatabasePlugin for SQLitePlugin {
         user_id: UserId,
         amount: usize,
         offset: usize,
-    ) -> Result<Vec<String>, String> {
+    ) -> Result<(Vec<String>, usize), String> {
+        let connection = self.get_connection()?;
+
         let query = format!(
             "
             SELECT name
@@ -399,8 +405,7 @@ impl DatabasePlugin for SQLitePlugin {
             user_id, amount, offset
         );
 
-        Ok(self
-            .get_connection()?
+        let playlists = connection
             .prepare(query)
             .unwrap()
             .into_cursor()
@@ -417,7 +422,26 @@ impl DatabasePlugin for SQLitePlugin {
                     None
                 }
             })
-            .collect())
+            .collect();
+
+        // Get total
+        let query = format!(
+            "
+            SELECT count(*)
+            FROM playlists
+            WHERE playlists.user_id={}
+            ;
+        ",
+            user_id
+        );
+
+        let count = if let Some(Ok(row)) = connection.prepare(query).unwrap().into_cursor().next() {
+            row.get::<i64, _>(0) - 1
+        } else {
+            0
+        };
+
+        Ok((playlists, count as usize))
     }
 }
 
@@ -715,8 +739,10 @@ mod tests {
 
         let playlists = db.get_playlists(user_id, 3, 0).unwrap();
 
-        assert_eq!(playlists[0], "playlist_3");
-        assert_eq!(playlists[1], "playlist_2");
-        assert_eq!(playlists[2], "playlist_1");
+        assert_eq!(playlists.0[0], "playlist_3");
+        assert_eq!(playlists.0[1], "playlist_2");
+        assert_eq!(playlists.0[2], "playlist_1");
+        // Count
+        assert_eq!(playlists.1, 3);
     }
 }

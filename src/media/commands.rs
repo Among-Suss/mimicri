@@ -24,7 +24,9 @@ pub async fn play_command(
     url: &String,
     allow_playlist: bool,
 ) -> CommandResult {
-    ctx.defer().await.expect("Failed to defer message");
+    ctx.defer_ephemeral()
+        .await
+        .expect("Failed to defer message");
 
     let guild = ctx.guild().unwrap();
 
@@ -168,7 +170,7 @@ async fn queue_variant(
 
         Ok(infos.into_iter().collect::<Vec<MediaInfo>>())
     } else {
-        let info = if query.starts_with("http") {
+        let info = if strings::is_url(query) {
             match metadata::get_info(query) {
                 Ok(url) => url,
                 Err(err) => return Err(err),

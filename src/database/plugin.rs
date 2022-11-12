@@ -21,6 +21,8 @@ pub type PluginDataResult = Result<(Vec<MediaInfo>, usize), DBError>;
 pub trait DatabasePlugin: Sync + Send {
     fn init_db(&self);
 
+    fn disabled(&self) -> bool;
+
     fn set_history(&self, user_id: UserId, song: &MediaInfo) -> PluginResult;
     /// Returns the history. Latest song is index 0.
     fn get_history(&self, user_id: UserId, amount: usize, offset: usize) -> PluginDataResult;
@@ -41,7 +43,7 @@ pub trait DatabasePlugin: Sync + Send {
         user_id: UserId,
         amount: usize,
         offset: usize,
-    ) -> Result<Vec<String>, String>;
+    ) -> Result<(Vec<String>, usize), String>;
 
     fn add_playlist_song(&self, user_id: UserId, name: &String, song: &MediaInfo) -> PluginResult;
 

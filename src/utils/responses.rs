@@ -102,7 +102,7 @@ where
     )
     .footer(|f| {
         f.text(format!(
-            "Page {} of {} ({} track(s))",
+            "Page {} of {}, {} track(s)",
             page + 1,
             total / page_size + 1,
             total

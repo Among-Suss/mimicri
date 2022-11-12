@@ -84,6 +84,10 @@ pub fn parse_timestamp(timestamp: &String) -> i64 {
     })
 }
 
+pub fn is_url(text: &String) -> bool {
+    text.starts_with("https://")
+}
+
 pub struct Timestamp {
     pub seconds: i64,
     pub label: String,

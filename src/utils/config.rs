@@ -32,19 +32,23 @@ pub mod colors {
     use serenity::utils::Colour;
 
     pub fn play() -> Colour {
-        Colour::from_rgb(0xf5, 0xc5, 0x05)
+        Colour::DARK_GREEN
     }
 
     pub fn queue() -> Colour {
-        Colour::from_rgb(0xf5, 0xc5, 0x05)
+        Colour::DARK_GREEN
     }
 
     pub fn now_playing() -> Colour {
-        Colour::from_rgb(0xf5, 0xc5, 0x05)
+        Colour::DARK_GREEN
     }
 
     pub fn history() -> Colour {
-        Colour::from_rgb(0xf5, 0xc5, 0x05)
+        Colour::PURPLE
+    }
+
+    pub fn playlist() -> Colour {
+        Colour::PURPLE
     }
 
     pub fn error() -> Colour {

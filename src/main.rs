@@ -9,7 +9,7 @@ use media::global_media_player::GlobalMediaPlayer;
 use poise::{command, serenity_prelude as serenity};
 use songbird::SerenityInit;
 use std::{env, sync::Arc};
-use tracing::info;
+use tracing::{error, info};
 use tracing_subscriber::{fmt, layer::SubscriberExt};
 use utils::{config, message_context};
 
@@ -113,6 +113,7 @@ async fn main() {
                 timestamp(),
                 history(),
                 play_history(),
+                database::commands::playlists(),
                 seek(),
                 skip(),
                 join(),
@@ -211,11 +212,6 @@ async fn timestamp(ctx: Context<'_>) -> CommandResult {
 }
 
 // Playlists
-
-#[command(slash_command, prefix_command, category = "playlists")]
-async fn playlists(ctx: Context<'_>) -> CommandResult {
-    Ok(())
-}
 
 #[command(slash_command, prefix_command, category = "playlists")]
 async fn history(
