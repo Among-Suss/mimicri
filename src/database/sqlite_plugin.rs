@@ -429,14 +429,14 @@ impl DatabasePlugin for SQLitePlugin {
             "
             SELECT count(*)
             FROM playlists
-            WHERE playlists.user_id={}
+            WHERE playlists.user_id={} AND playlists.name!='{HISTORY_PLAYLIST}'
             ;
         ",
             user_id
         );
 
         let count = if let Some(Ok(row)) = connection.prepare(query).unwrap().into_cursor().next() {
-            row.get::<i64, _>(0) - 1
+            row.get::<i64, _>(0)
         } else {
             0
         };

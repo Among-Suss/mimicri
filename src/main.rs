@@ -9,7 +9,7 @@ use media::global_media_player::GlobalMediaPlayer;
 use poise::{command, serenity_prelude as serenity};
 use songbird::SerenityInit;
 use std::{env, sync::Arc};
-use tracing::{error, info};
+use tracing::info;
 use tracing_subscriber::{fmt, layer::SubscriberExt};
 use utils::{config, message_context};
 

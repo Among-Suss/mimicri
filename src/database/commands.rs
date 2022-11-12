@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use poise::{command, serenity_prelude as serenity};
+use poise::command;
 use tracing::{error, info};
 
 use crate::{
