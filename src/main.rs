@@ -6,7 +6,7 @@ mod utils;
 
 use dotenv::dotenv;
 use media::global_media_player::GlobalMediaPlayer;
-use poise::serenity_prelude as serenity;
+use poise::{command, serenity_prelude as serenity};
 use songbird::SerenityInit;
 use std::{env, sync::Arc};
 use tracing::info;
@@ -106,8 +106,7 @@ async fn main() {
         })
         .options(poise::FrameworkOptions {
             commands: vec![
-                play_prefix(),
-                play_slash(),
+                play(),
                 play_single(),
                 queue(),
                 now_playing(),
@@ -140,52 +139,54 @@ async fn main() {
 }
 
 // Media
-#[poise::command(prefix_command, rename = "play", aliases("p"), category = "media")]
-async fn play_prefix(
+#[command(
+    slash_command,
+    prefix_command,
+    aliases("p"),
+    broadcast_typing,
+    category = "media"
+)]
+async fn play(
     ctx: Context<'_>,
-    #[description = "Query or url"] song: Vec<String>,
-) -> Result<(), Error> {
-    media::commands::play_command(&GLOBAL_MEDIA_PLAYER, ctx, &song.join(" "), true).await
-}
-
-#[poise::command(slash_command, rename = "play", aliases("p"), category = "media")]
-async fn play_slash(
-    ctx: Context<'_>,
-    #[description = "Query or url"] song: String,
-) -> Result<(), Error> {
+    #[description = "Query or url"]
+    #[rest]
+    song: String,
+) -> CommandResult {
     media::commands::play_command(&GLOBAL_MEDIA_PLAYER, ctx, &song, true).await
 }
 
-#[poise::command(
+#[command(
     slash_command,
     prefix_command,
-    aliases("ps", "play-single"),
+    rename = "play-single",
+    aliases("ps"),
+    broadcast_typing,
     category = "media"
 )]
 async fn play_single(
     ctx: Context<'_>,
     #[description = "Query or url"] song: Vec<String>,
-) -> Result<(), Error> {
+) -> CommandResult {
     media::commands::play_command(&GLOBAL_MEDIA_PLAYER, ctx, &song.join(" "), false).await
 }
 
-#[poise::command(slash_command, prefix_command, category = "media")]
-async fn skip(ctx: Context<'_>) -> Result<(), Error> {
+#[command(slash_command, prefix_command, broadcast_typing, category = "media")]
+async fn skip(ctx: Context<'_>) -> CommandResult {
     media::commands::skip(&GLOBAL_MEDIA_PLAYER, ctx).await
 }
 
-#[poise::command(slash_command, prefix_command, category = "media")]
-async fn seek(ctx: Context<'_>, #[description = "Timestampe"] to: String) -> Result<(), Error> {
+#[command(slash_command, prefix_command, category = "media")]
+async fn seek(ctx: Context<'_>, #[description = "Timestampe"] to: String) -> CommandResult {
     media::commands::seek(&GLOBAL_MEDIA_PLAYER, ctx, &to).await
 }
 
-#[poise::command(slash_command, prefix_command, category = "media")]
+#[command(slash_command, prefix_command, category = "media")]
 async fn queue(
     ctx: Context<'_>,
     #[description = "Page #"]
     #[min = 1]
     page: Option<i64>,
-) -> Result<(), Error> {
+) -> CommandResult {
     let Some(page) = validate_page(ctx,page).await else {
         return Ok(());
     };
@@ -193,31 +194,36 @@ async fn queue(
     media::commands::queue(&GLOBAL_MEDIA_PLAYER, ctx, page).await
 }
 
-#[poise::command(
+#[command(
     slash_command,
     prefix_command,
     rename = "now-playing",
     aliases("np"),
     category = "media"
 )]
-async fn now_playing(ctx: Context<'_>) -> Result<(), Error> {
+async fn now_playing(ctx: Context<'_>) -> CommandResult {
     media::commands::now_playing(&GLOBAL_MEDIA_PLAYER, ctx).await
 }
 
-#[poise::command(slash_command, prefix_command, category = "media")]
-async fn timestamp(ctx: Context<'_>) -> Result<(), Error> {
+#[command(slash_command, prefix_command, category = "media")]
+async fn timestamp(ctx: Context<'_>) -> CommandResult {
     media::commands::timestamp(&GLOBAL_MEDIA_PLAYER, ctx).await
 }
 
 // Playlists
 
-#[poise::command(slash_command, prefix_command, category = "playlists")]
+#[command(slash_command, prefix_command, category = "playlists")]
+async fn playlists(ctx: Context<'_>) -> CommandResult {
+    Ok(())
+}
+
+#[command(slash_command, prefix_command, category = "playlists")]
 async fn history(
     ctx: Context<'_>,
     #[description = "Page #"]
     #[min = 1]
     page: Option<i64>,
-) -> Result<(), Error> {
+) -> CommandResult {
     let Some(page) = validate_page(ctx,page).await else {
         return Ok(());
     };
@@ -225,7 +231,7 @@ async fn history(
     database::commands::history(ctx, page).await
 }
 
-#[poise::command(
+#[command(
     slash_command,
     prefix_command,
     rename = "play-history",
@@ -236,7 +242,7 @@ async fn play_history(
     #[description = "Index #"]
     #[min = 1]
     index: i64,
-) -> Result<(), Error> {
+) -> CommandResult {
     if index < 1 {
         ctx.error("Index cannot be less than 1").await;
         return Ok(());
@@ -251,53 +257,52 @@ async fn play_history(
 
 // Controls
 
-#[poise::command(slash_command, prefix_command, category = "controls")]
-async fn join(ctx: Context<'_>) -> Result<(), Error> {
+#[command(slash_command, prefix_command, category = "controls")]
+async fn join(ctx: Context<'_>) -> CommandResult {
     controls::commands::join(&GLOBAL_MEDIA_PLAYER, ctx).await
 }
 
-#[poise::command(slash_command, prefix_command, category = "controls")]
-async fn leave(ctx: Context<'_>) -> Result<(), Error> {
+#[command(slash_command, prefix_command, category = "controls")]
+async fn leave(ctx: Context<'_>) -> CommandResult {
     controls::commands::leave(&GLOBAL_MEDIA_PLAYER, &ctx).await
 }
 
-#[poise::command(slash_command, prefix_command, category = "controls")]
-async fn mute(ctx: Context<'_>) -> Result<(), Error> {
+#[command(slash_command, prefix_command, category = "controls")]
+async fn mute(ctx: Context<'_>) -> CommandResult {
     controls::commands::mute(&ctx).await
 }
 
-#[poise::command(slash_command, prefix_command, category = "controls")]
-async fn unmute(ctx: Context<'_>) -> Result<(), Error> {
+#[command(slash_command, prefix_command, category = "controls")]
+async fn unmute(ctx: Context<'_>) -> CommandResult {
     controls::commands::unmute(&ctx).await
 }
 
-#[poise::command(slash_command, prefix_command, category = "controls")]
-async fn deafen(ctx: Context<'_>) -> Result<(), Error> {
+#[command(slash_command, prefix_command, category = "controls")]
+async fn deafen(ctx: Context<'_>) -> CommandResult {
     controls::commands::deafen(&ctx).await
 }
 
-#[poise::command(slash_command, prefix_command, category = "controls")]
-async fn undeafen(ctx: Context<'_>) -> Result<(), Error> {
+#[command(slash_command, prefix_command, category = "controls")]
+async fn undeafen(ctx: Context<'_>) -> CommandResult {
     controls::commands::undeafen(&ctx).await
 }
 
 // Logging
-#[poise::command(slash_command, prefix_command, category = "debug")]
-async fn log(
-    ctx: Context<'_>,
-    #[description = "Arguments"] args: Option<String>,
-) -> Result<(), Error> {
+
+#[command(slash_command, prefix_command, category = "debug")]
+async fn log(ctx: Context<'_>, #[description = "Arguments"] args: Option<String>) -> CommandResult {
     logging::commands::log(ctx, &args.unwrap_or_default()).await
 }
 
-#[poise::command(slash_command, prefix_command, aliases("log-file"), category = "debug")]
-async fn log_file(ctx: Context<'_>) -> Result<(), Error> {
+#[command(slash_command, prefix_command, aliases("log-file"), category = "debug")]
+async fn log_file(ctx: Context<'_>) -> CommandResult {
     logging::commands::log_file(ctx).await
 }
 
-// Help
-#[poise::command(slash_command, prefix_command, aliases("v"), category = "debug")]
-async fn version(ctx: Context<'_>) -> Result<(), Error> {
+// Misc and tools
+
+#[command(slash_command, prefix_command, aliases("v"), category = "debug")]
+async fn version(ctx: Context<'_>) -> CommandResult {
     ctx.info(format!("Version: {}", env!("VERGEN_GIT_SEMVER")))
         .await;
 
@@ -305,20 +310,20 @@ async fn version(ctx: Context<'_>) -> Result<(), Error> {
 }
 
 /// Registers or unregisters application commands in this guild or globally
-#[poise::command(prefix_command, hide_in_help)]
-async fn register(ctx: Context<'_>) -> Result<(), Error> {
+#[command(prefix_command, hide_in_help)]
+async fn register(ctx: Context<'_>) -> CommandResult {
     poise::builtins::register_application_commands_buttons(ctx).await?;
 
     Ok(())
 }
 
-#[poise::command(prefix_command, track_edits, slash_command)]
+#[command(prefix_command, track_edits, slash_command)]
 async fn help(
     ctx: Context<'_>,
     #[description = "Specific command to show help about"]
     #[autocomplete = "poise::builtins::autocomplete_command"]
     command: Option<String>,
-) -> Result<(), Error> {
+) -> CommandResult {
     poise::builtins::help(
         ctx,
         command.as_deref(),

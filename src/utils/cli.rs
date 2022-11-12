@@ -20,7 +20,9 @@ pub async fn parse_args() -> Option<i32> {
 
     let _guild_name = http.get_guild(guild_id).await.unwrap().name;
 
-    if args.len() > 0 {
+    if args.len() > 1 {
+        println!("Running in CLI mode...");
+
         let mut exit_code = 0;
         for arg in &args[1..args.len()] {
             match arg.as_str() {
