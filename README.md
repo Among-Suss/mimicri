@@ -1,6 +1,6 @@
 # mimicri
 
-![Version](https://img.shields.io/docker/v/poohcom1/mimicri?arch=amd64&sort=date)
+[![Version](https://img.shields.io/docker/v/poohcom1/mimicri?color=blue&logo=docker&style=flat-square)](https://hub.docker.com/repository/docker/poohcom1/mimicri)
 
 _THIS PROJECT IS UNDER HEAVY DEVELOPMENT_
 
