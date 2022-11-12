@@ -2,7 +2,7 @@ use serenity::model::prelude::GuildId;
 use tracing::{error, warn};
 
 use crate::{
-    controls::commands::join,
+    controls::join,
     database::plugin::get_db_plugin,
     utils::{
         config,
