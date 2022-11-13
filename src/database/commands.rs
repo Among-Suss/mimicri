@@ -1,10 +1,10 @@
 use std::sync::Arc;
 
 use poise::command;
-use tracing::{error, info};
+use tracing::error;
 
 use crate::{
-    media::metadata,
+    media::{media_info::MediaInfo, metadata},
     utils::{
         config,
         responses::{self, Responses},
@@ -65,7 +65,7 @@ async fn create_playlist(
             // Create playlist
             if let Err(err) = db.create_playlist(ctx.author().id, &playlist_info.title) {
                 ctx.error("Failed to create playlist").await;
-                error!(err);
+                error!("{}", err);
                 return Ok(());
             }
 
@@ -74,15 +74,11 @@ async fn create_playlist(
 
             let len = songs.len();
 
-            let before = std::time::Instant::now();
-
-            info!("Started queuing");
-
-            for song in songs {
-                let _ = db.add_playlist_song(ctx.author().id, &playlist_info.title, &song);
-            }
-
-            info!("Elapsed:: {:.2?}", before.elapsed());
+            let _ = db.add_playlist_songs(
+                ctx.author().id,
+                &playlist_info.title,
+                songs.iter().collect::<Vec<&MediaInfo>>(),
+            );
 
             ctx.send(|m| {
                 m.embed(|e| {
@@ -105,7 +101,7 @@ async fn create_playlist(
         // Name
         if let Err(err) = db.create_playlist(ctx.author().id, &playlist) {
             ctx.error("Failed to create playlist").await;
-            error!(err);
+            error!("{}", err);
         }
     }
 

@@ -1,7 +1,7 @@
 use std::env;
 
+use rusqlite::{named_params, params, Connection, OpenFlags};
 use serenity::model::prelude::UserId;
-use sqlite::OpenFlags;
 use tracing::{error, info};
 
 use crate::media::media_info::MediaInfo;
@@ -9,6 +9,14 @@ use crate::media::media_info::MediaInfo;
 use super::plugin::{DBError, DatabasePlugin};
 
 const HISTORY_PLAYLIST: &str = "_history";
+
+impl From<rusqlite::Error> for DBError {
+    fn from(err: rusqlite::Error) -> Self {
+        DBError {
+            message: format!("sqlite error: {}", err),
+        }
+    }
+}
 
 fn escape_json(json: String) -> String {
     json.replace("'", "''")
@@ -19,27 +27,15 @@ pub struct SQLitePlugin {
 }
 
 impl SQLitePlugin {
-    fn get_connection(&self) -> Result<sqlite::Connection, DBError> {
-        match sqlite::Connection::open_with_flags(
-            self.path.clone(),
-            OpenFlags::new()
-                .set_create()
-                .set_read_write()
-                .set_full_mutex(),
+    fn get_connection(&self) -> Result<Connection, DBError> {
+        match Connection::open_with_flags(
+            &self.path,
+            OpenFlags::SQLITE_OPEN_CREATE
+                | OpenFlags::SQLITE_OPEN_READ_WRITE
+                | OpenFlags::SQLITE_OPEN_FULL_MUTEX,
         ) {
-            Err(err) => {
-                error!("[sqlite] {}", err.to_string());
-                Err("Unable to connect to database".to_string())
-            }
-            Ok(mut c) => {
-                match c.set_busy_timeout(10000) {
-                    Ok(_) => (),
-                    Err(err) => {
-                        error!("[sqlite] Failed to set busy_timeout: {}", err.to_string())
-                    }
-                }
-                Ok(c)
-            }
+            Ok(conn) => Ok(conn),
+            Err(err) => Err(err.into()),
         }
     }
 
@@ -56,87 +52,80 @@ impl SQLitePlugin {
         reverse: bool,
     ) -> Result<(Vec<MediaInfo>, usize), DBError> {
         if self.is_disabled() {
-            return Err("SQLite plugin not enabled!".to_string());
+            return Err("SQLite plugin not enabled!".into());
         }
 
         let connection = self.get_connection()?;
 
-        let query = format!(
+        // Get songs
+        let mut statement = connection.prepare(&format!(
             "
-            SELECT playlists_map.song_url, songs.metadata 
+            SELECT playlists_map.song_url, songs.metadata
             FROM playlists_map 
             INNER JOIN songs ON songs.url=playlists_map.song_url
             WHERE playlists_map.playlist_id=(
                 SELECT id
                 FROM playlists
-                WHERE user_id={} AND name='{}'
+                WHERE user_id=:user_id AND name=:playlist_name
             )
             ORDER BY id {}
-            LIMIT {}
-            OFFSET {}
-            ;
-        ",
-            user_id,
-            name,
-            if reverse { "DESC" } else { "ASC" },
-            amount,
-            offset
-        );
+            LIMIT :limit
+            OFFSET :offset
+            ",
+            if reverse { "DESC" } else { "ASC" }
+        ))?;
 
-        let infos: Vec<MediaInfo> = connection
-            .prepare(query)
-            .expect("Unable to connect to sqlite3")
-            .into_cursor()
-            .into_iter()
-            .filter_map(|c| {
-                if let Ok(row) = c {
-                    let url = row.get::<String, _>(0);
-                    let info_json = row.get::<String, _>(1);
+        let query = statement.query_map(
+            named_params! {
+                ":user_id": user_id.as_u64(),
+                ":playlist_name": name,
+                ":limit": amount,
+                ":offset": offset,
+            },
+            |r| {
+                let url = r.get::<_, String>(0).unwrap();
+                let info_json = r.get::<_, String>(1).unwrap();
+                // size = r.get::<_, i64>(2).unwrap();
 
-                    Some(
-                        match serde_json::from_str::<MediaInfo>(info_json.as_str()) {
-                            Ok(info) => info,
-                            Err(err) => {
-                                error!(
+                match serde_json::from_str::<MediaInfo>(info_json.as_str()) {
+                    Ok(info) => Ok(info),
+                    Err(err) => {
+                        error!(
                             "Unable to deserialize json from history: {}. Error message: {}",
                             info_json, err
                         );
-                                MediaInfo {
-                                    url: url.clone(),
-                                    title: url.clone(),
-                                    ..MediaInfo::empty()
-                                }
-                            }
-                        },
-                    )
-                } else {
-                    None
+                        Ok(MediaInfo {
+                            url: url.clone(),
+                            title: url.clone(),
+                            ..MediaInfo::empty()
+                        })
+                    }
                 }
-            })
-            .collect::<Vec<MediaInfo>>();
+            },
+        )?;
 
-        // Get total
-        let query = format!(
+        let songs: Vec<MediaInfo> = query.filter_map(|m| m.ok()).collect();
+
+        // Get size
+        let mut statement = connection.prepare(
             "
             SELECT count(*)
             FROM playlists_map 
             WHERE playlists_map.playlist_id=(
                 SELECT id
                 FROM playlists
-                WHERE user_id={} AND name='{}'
+                WHERE user_id=?1 AND name=?2
             )
-            ;
-        ",
-            user_id, name,
-        );
+            ",
+        )?;
 
-        let count = if let Some(Ok(row)) = connection.prepare(query).unwrap().into_cursor().next() {
-            row.get::<i64, _>(0)
-        } else {
-            0
-        };
+        let size: i64 = statement
+            .query(params![user_id.as_u64(), name])?
+            .next()?
+            .unwrap()
+            .get(0)?;
 
-        Ok((infos, count as usize))
+        Ok((songs, size as usize))
     }
 }
 
@@ -167,11 +156,10 @@ impl DatabasePlugin for SQLitePlugin {
         };
 
         connection
-            .execute(format!(
+            .execute_batch(
                 "
                 CREATE TABLE IF NOT EXISTS users (
                     id INTEGER PRIMARY KEY
-
                 );
                 CREATE TABLE IF NOT EXISTS songs (
                     url TEXT PRIMARY KEY,
@@ -207,8 +195,8 @@ impl DatabasePlugin for SQLitePlugin {
                         FOREIGN KEY(song_url) REFERENCES songs(url)
                         ON DELETE CASCADE
                 );
-                "
-            ))
+                ",
+            )
             .expect("[sqlite] Unable to init database");
     }
 
@@ -222,26 +210,26 @@ impl DatabasePlugin for SQLitePlugin {
         }
 
         if name == HISTORY_PLAYLIST {
-            return Err("Cannot use this name for a database.".to_string());
+            return Err("Cannot use this name for a database.".into());
         }
 
         let connection = self.get_connection()?;
 
-        let query = format!(
-            "
-                BEGIN TRANSACTION;
-                INSERT OR IGNORE INTO users VALUES ({});
-                INSERT OR IGNORE INTO playlists VALUES (NULL, '{}', {});
-                COMMIT;
-                ",
-            user_id, name, user_id
-        );
+        connection.execute(
+            "INSERT OR IGNORE INTO users VALUES (?1)",
+            params![&user_id.as_u64()],
+        )?;
 
-        match connection.execute(query) {
+        match connection.execute(
+            "
+                INSERT OR IGNORE INTO playlists VALUES (NULL, ?1, ?2)
+                ",
+            params![name, user_id.as_u64()],
+        ) {
             Ok(_) => (),
             Err(err) => {
                 error!("[sqlite] Failed to create playlist {}; {}", name, err);
-                return Err("Failed to create playlist".to_string());
+                return Err("Failed to create playlist".into());
             }
         }
 
@@ -255,30 +243,29 @@ impl DatabasePlugin for SQLitePlugin {
 
         let connection = self.get_connection()?;
 
-        let query = format!(
-            "
-                PRAGMA foreign_keys = ON;
-                DELETE FROM playlists WHERE name='{}' AND user_id = {};
-                ",
-            name, user_id
-        );
+        connection.execute("PRAGMA foreign_keys = ON", ())?;
 
-        match connection.execute(query) {
+        match connection.execute(
+            "DELETE FROM playlists WHERE name=?1 AND user_id = ?2",
+            (name, user_id.as_u64()),
+        ) {
             Ok(_) => (),
             Err(err) => {
                 error!("[sqlite] {}", err.to_string());
-                return Err("Failed to delete song".to_string());
+                return Err(format!("Failed to delete playlist: {}", err)
+                    .as_str()
+                    .into());
             }
         }
 
         Ok(())
     }
 
-    fn add_playlist_song(
+    fn add_playlist_songs(
         &self,
         user_id: UserId,
         name: &String,
-        info: &MediaInfo,
+        songs: Vec<&MediaInfo>,
     ) -> Result<(), DBError> {
         if self.is_disabled() {
             return Ok(());
@@ -286,34 +273,62 @@ impl DatabasePlugin for SQLitePlugin {
 
         let connection = self.get_connection()?;
 
-        let query = format!(
-            "
-            BEGIN TRANSACTION;
-                INSERT OR IGNORE INTO users VALUES ({});
-                INSERT OR IGNORE INTO songs VALUES ('{}', '{}');
-                INSERT OR IGNORE INTO playlists VALUES (NULL, '{}', {});
-                INSERT OR REPLACE INTO playlists_map VALUES (NULL, (
-                    SELECT id FROM playlists WHERE name='{}' AND user_id={} LIMIT 1
-                ), '{}');
-            COMMIT;
-                ",
-            user_id,
-            &info.url,
-            escape_json(serde_json::to_value(info.clone()).unwrap().to_string()),
-            name,
-            user_id,
-            name,
-            user_id,
-            &info.url
+        // Create user
+        connection.execute(
+            "INSERT OR IGNORE INTO users VALUES (?1)",
+            params![&user_id.as_u64()],
+        )?;
+
+        // Create or get playlist
+        let mut statement =
+            connection.prepare("SELECT id FROM playlists WHERE user_id=?1 AND name=?2")?;
+
+        let playlist_id: Option<i64> =
+            match statement.query(params![&user_id.as_u64(), name])?.next()? {
+                Some(row) => Some(row.get(0)?),
+                None => None,
+            };
+
+        let playlist_id: i64 = match playlist_id {
+            Some(id) => id,
+            None => {
+                connection.execute(
+                    "INSERT INTO playlists VALUES (NULL, :playlist_name, :user_id)",
+                    named_params! { ":playlist_name": &name, ":user_id": &user_id.as_u64() },
+                )?;
+
+                connection.last_insert_rowid()
+            }
+        };
+
+        // Insert songs
+        let query = &format!(
+            "INSERT OR IGNORE INTO songs VALUES {}",
+            &songs
+                .iter()
+                .map(|s| format!(
+                    "('{}', '{}')",
+                    s.url,
+                    &escape_json(serde_json::to_value(s.clone()).unwrap().to_string())
+                ))
+                .collect::<Vec<String>>()
+                .join(", ")
         );
 
-        match connection.execute(query) {
-            Ok(_) => (),
-            Err(err) => {
-                error!("[sqlite] {}", err.to_string());
-                return Err("Failed to add to playlist".to_string());
-            }
-        }
+        connection.execute(query, ())?;
+
+        connection.execute(
+            format!(
+                "INSERT OR REPLACE INTO playlists_map VALUES {}",
+                &songs
+                    .iter()
+                    .map(|s| format!("(NULL, '{}', '{}')", &playlist_id, &s.url))
+                    .collect::<Vec<String>>()
+                    .join(", ")
+            )
+            .as_str(),
+            (),
+        )?;
 
         Ok(())
     }
@@ -330,27 +345,24 @@ impl DatabasePlugin for SQLitePlugin {
 
         let connection = self.get_connection()?;
 
-        let query = format!(
-            "
-                PRAGMA foreign_keys = ON;
+        connection.execute("PRAGMA foreign_keys = ON", ())?;
 
+        match connection.execute(
+            "
                 DELETE FROM playlists_map
-                WHERE song_url='{}' AND 
+                WHERE song_url=?1 AND 
                       id=(
                         SELECT id 
                         FROM playlists
-                        WHERE name='{}' AND
-                              user_id = {}
+                        WHERE name=?2 AND user_id=?3
                       );
                 ",
-            url, name, user_id
-        );
-
-        match connection.execute(query) {
+            (url, name, user_id.as_u64()),
+        ) {
             Ok(_) => (),
             Err(err) => {
                 error!("[sqlite] {}", err.to_string());
-                return Err("Failed to delete song".to_string());
+                return Err(format!("Failed to delete song: {}", err).into());
             }
         }
 
@@ -368,7 +380,7 @@ impl DatabasePlugin for SQLitePlugin {
     }
 
     fn set_history(&self, user_id: UserId, info: &MediaInfo) -> Result<(), DBError> {
-        self.add_playlist_song(user_id, &HISTORY_PLAYLIST.to_string(), info)
+        self.add_playlist_songs(user_id, &HISTORY_PLAYLIST.to_string(), vec![info])
     }
 
     fn get_history(
@@ -385,63 +397,48 @@ impl DatabasePlugin for SQLitePlugin {
         user_id: UserId,
         amount: usize,
         offset: usize,
-    ) -> Result<(Vec<String>, usize), String> {
+    ) -> Result<(Vec<String>, usize), DBError> {
         let connection = self.get_connection()?;
 
-        let query = format!(
+        // Get playlists
+        let mut statement = connection.prepare(
             "
             SELECT name
             FROM playlists
             WHERE playlists.user_id=(
                 SELECT id
                 FROM users
-                WHERE id={}
+                WHERE id=:user_id
             )
             ORDER BY id DESC
-            LIMIT {}
-            OFFSET {}
-            ;
-        ",
-            user_id, amount, offset
-        );
+            LIMIT :limit
+            OFFSET :offset
+            ",
+        )?;
 
-        let playlists = connection
-            .prepare(query)
-            .unwrap()
-            .into_cursor()
-            .filter_map(|r| {
-                if let Ok(row) = r {
-                    let playlist = row.get::<String, _>(0);
+        let query = statement.query_map(
+            named_params! { ":user_id": user_id.as_u64(), ":limit": amount, ":offset": offset },
+            |r| r.get::<_, String>(0),
+        )?;
 
-                    if playlist == HISTORY_PLAYLIST {
-                        None
-                    } else {
-                        Some(playlist)
-                    }
-                } else {
-                    None
-                }
-            })
-            .collect();
+        let playlists: Vec<String> = query.filter_map(|m| m.ok()).collect();
 
-        // Get total
-        let query = format!(
+        // Get size
+        let mut statement = connection.prepare(
             "
             SELECT count(*)
             FROM playlists
-            WHERE playlists.user_id={} AND playlists.name!='{HISTORY_PLAYLIST}'
-            ;
-        ",
-            user_id
-        );
+            WHERE playlists.user_id=?1 AND playlists.name!='{HISTORY_PLAYLIST}'
+            ",
+        )?;
 
-        let count = if let Some(Ok(row)) = connection.prepare(query).unwrap().into_cursor().next() {
-            row.get::<i64, _>(0)
-        } else {
-            0
-        };
+        let size: i64 = statement
+            .query(params![user_id.as_u64()])?
+            .next()?
+            .unwrap()
+            .get(0)?;
 
-        Ok((playlists, count as usize))
+        Ok((playlists, size as usize))
     }
 }
 
@@ -454,26 +451,24 @@ mod tests {
     const TEST_DB: &str = "test.sqlite";
 
     fn mock_db_plugin() -> SQLitePlugin {
-        let mut connection = sqlite::Connection::open_with_flags(
+        let connection = Connection::open_with_flags(
             TEST_DB,
-            OpenFlags::new()
-                .set_create()
-                .set_read_write()
-                .set_full_mutex(),
+            OpenFlags::SQLITE_OPEN_CREATE
+                | OpenFlags::SQLITE_OPEN_READ_WRITE
+                | OpenFlags::SQLITE_OPEN_FULL_MUTEX,
         )
         .unwrap();
 
-        let _ = connection.set_busy_timeout(10000);
-
+        // Clear database
         connection
-            .execute(
+            .execute_batch(
                 "
-            DROP TABLE IF EXISTS users;
-            DROP TABLE IF EXISTS songs;
-            DROP TABLE IF EXISTS playlists;
-            DROP TABLE IF EXISTS playlists_map;
-        
-        ",
+            PRAGMA writable_schema = 1;
+            DELETE FROM sqlite_master;
+            PRAGMA writable_schema = 0;
+            VACUUM;
+            PRAGMA integrity_check;
+            ",
             )
             .unwrap();
 
@@ -512,7 +507,7 @@ mod tests {
             playlist: None,
         };
 
-        let result = db.add_playlist_song(user_id, &playlist, &song);
+        let result = db.add_playlist_songs(user_id, &playlist, vec![&song]);
 
         assert!(result.is_ok());
 
@@ -538,7 +533,7 @@ mod tests {
             playlist: None,
         };
 
-        let result = db.add_playlist_song(user_id, &playlist, &song);
+        let result = db.add_playlist_songs(user_id, &playlist, vec![&song]);
 
         assert!(result.is_ok());
 
@@ -549,7 +544,7 @@ mod tests {
 
     #[test]
     #[serial]
-    fn set_history() {
+    fn history_e2e() -> rusqlite::Result<()> {
         let db = mock_db_plugin();
 
         let user_id = UserId(1);
@@ -560,45 +555,35 @@ mod tests {
 
         let connection = db.get_connection().unwrap();
 
-        let user_row = connection
-            .prepare("SELECT * FROM users")
-            .unwrap()
-            .into_cursor()
-            .next()
-            .unwrap()
-            .unwrap();
+        let mut statement = connection.prepare("SELECT * FROM users")?;
+        let mut user_row = statement.query([])?;
+        let user_row = user_row.next()?.unwrap();
 
-        let song_row = connection
-            .prepare("SELECT * FROM songs")
-            .unwrap()
-            .into_cursor()
-            .next()
-            .unwrap()
-            .unwrap();
+        let mut statement = connection.prepare("SELECT * FROM songs")?;
+        let mut song_row = statement.query([])?;
+        let song_row = song_row.next()?.unwrap();
 
-        let playlist_row = connection
-            .prepare("SELECT * FROM playlists")
-            .unwrap()
-            .into_cursor()
-            .next()
-            .unwrap()
-            .unwrap();
+        let mut statement = connection.prepare("SELECT * FROM playlists")?;
+        let mut playlist_row = statement.query([])?;
+        let playlist_row = playlist_row.next()?.unwrap();
 
-        let playlist_map = connection
-            .prepare("SELECT * FROM playlists_map")
-            .unwrap()
-            .into_cursor()
-            .next()
-            .unwrap()
-            .unwrap();
+        let mut statement = connection.prepare("SELECT * FROM playlists_map")?;
+        let mut playlist_map = statement.query([])?;
+        let playlist_map = playlist_map.next()?.unwrap();
 
-        assert_eq!(user_row.get::<i64, _>(0), *user_id.as_u64() as i64);
-        assert_eq!(song_row.get::<String, _>(0), song.url);
+        assert_eq!(user_row.get::<_, i64>(0).unwrap(), *user_id.as_u64() as i64);
+        assert_eq!(song_row.get::<_, String>(0).unwrap(), song.url);
 
-        assert_eq!(playlist_row.get::<String, _>(1), "_history");
-        assert_eq!(playlist_row.get::<i64, _>(2), *user_id.as_u64() as i64);
+        assert_eq!(playlist_row.get::<_, String>(1).unwrap(), HISTORY_PLAYLIST);
 
-        assert_eq!(playlist_map.get::<String, _>(2), song.url);
+        assert_eq!(
+            playlist_row.get::<_, i64>(2).unwrap(),
+            *user_id.as_u64() as i64
+        );
+
+        assert_eq!(playlist_map.get::<_, String>(2).unwrap(), song.url);
+
+        Ok(())
     }
 
     fn mock_info(url: &str) -> MediaInfo {
@@ -675,17 +660,13 @@ mod tests {
         let song2 = mock_info("extra_song_1");
         let song3 = mock_info("extra_song_2");
 
-        db.add_playlist_song(user_id, &playlist_name, &song1)
-            .unwrap();
-        db.add_playlist_song(user_id, &playlist_name, &song2)
-            .unwrap();
-        db.add_playlist_song(user_id, &playlist_name, &song3)
+        db.add_playlist_songs(user_id, &playlist_name, vec![&song1, &song2, &song3])
             .unwrap();
 
-        let songs = db.get_playlist(user_id, &playlist_name, 3, 0).unwrap().0;
+        let (songs, total) = db.get_playlist(user_id, &playlist_name, 3, 0).unwrap();
 
+        assert_eq!(total, 3);
         assert_eq!(songs[0], song1);
-        assert_eq!(songs.len(), 3);
 
         db.delete_playlist_song(user_id, &playlist_name, &song1.url)
             .unwrap();
@@ -697,7 +678,7 @@ mod tests {
 
     #[test]
     #[serial]
-    fn delete_playlist() {
+    fn delete_playlist() -> rusqlite::Result<()> {
         let db = mock_db_plugin();
 
         let user_id = UserId(5);
@@ -706,9 +687,7 @@ mod tests {
         let song1 = mock_info("song_1");
         let song2 = mock_info("song_2");
 
-        db.add_playlist_song(user_id, &playlist_name, &song1)
-            .unwrap();
-        db.add_playlist_song(user_id, &playlist_name, &song2)
+        db.add_playlist_songs(user_id, &playlist_name, vec![&song1, &song2])
             .unwrap();
 
         let songs = db.get_playlist(user_id, &playlist_name, 10, 0).unwrap().0;
@@ -719,12 +698,12 @@ mod tests {
 
         let connection = db.get_connection().unwrap();
 
-        let mut cursor = connection
-            .prepare(format!("SELECT COUNT(*) FROM playlists_map;"))
-            .unwrap()
-            .into_cursor();
+        let mut statement = connection.prepare("SELECT COUNT(*) FROM playlists_map;")?;
+        let mut row = statement.query([])?;
 
-        assert_eq!(cursor.next().unwrap().unwrap().get::<i64, _>(0), 0);
+        assert_eq!(row.next()?.unwrap().get::<_, i64>(0).unwrap(), 0);
+
+        Ok(())
     }
 
     #[test]

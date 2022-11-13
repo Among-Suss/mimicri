@@ -4,7 +4,7 @@ use serenity::{
     prelude::TypeMapKey,
 };
 
-use std::sync::Arc;
+use std::{fmt::Display, sync::Arc};
 
 use crate::media::media_info::MediaInfo;
 
@@ -14,7 +14,31 @@ impl TypeMapKey for DatabasePluginKey {
     type Value = Arc<dyn DatabasePlugin>;
 }
 
-pub type DBError = String;
+#[derive(Debug)]
+pub struct DBError {
+    pub message: String,
+}
+
+impl From<&str> for DBError {
+    fn from(str: &str) -> Self {
+        DBError {
+            message: str.to_string(),
+        }
+    }
+}
+
+impl From<String> for DBError {
+    fn from(str: String) -> Self {
+        DBError { message: str }
+    }
+}
+
+impl Display for DBError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.message)
+    }
+}
+
 pub type PluginResult = Result<(), DBError>;
 pub type PluginDataResult = Result<(Vec<MediaInfo>, usize), DBError>;
 
@@ -43,9 +67,14 @@ pub trait DatabasePlugin: Sync + Send {
         user_id: UserId,
         amount: usize,
         offset: usize,
-    ) -> Result<(Vec<String>, usize), String>;
+    ) -> Result<(Vec<String>, usize), DBError>;
 
-    fn add_playlist_song(&self, user_id: UserId, name: &String, song: &MediaInfo) -> PluginResult;
+    fn add_playlist_songs(
+        &self,
+        user_id: UserId,
+        name: &String,
+        song: Vec<&MediaInfo>,
+    ) -> PluginResult;
 
     fn delete_playlist_song(&self, user_id: UserId, name: &String, url: &String) -> PluginResult;
 }
