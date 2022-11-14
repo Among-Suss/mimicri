@@ -1,4 +1,4 @@
-use std::sync::Arc;
+use std::{collections::LinkedList, sync::Arc};
 
 use poise::command;
 use tracing::error;
@@ -129,9 +129,43 @@ async fn get_playlists(ctx: Context<'_>, #[min = 1] page: Option<usize>) -> Comm
 async fn play_playlist(
     ctx: Context<'_>,
     #[description = "Playlist"]
+    #[rename = "playlist"]
+    #[rest]
     #[autocomplete = "autocomplete_playlists"]
-    playlist: String,
+    playlist_name: String,
 ) -> CommandResult {
+    let db = get_db(ctx).await?;
+    let media_playlist = media::plugin::get_media_player(ctx.discord())
+        .await
+        .unwrap();
+
+    let Ok(playlist) = db.get_playlist(ctx.author().id, &playlist_name, 9999, 0) else {
+        ctx.error("Unable to retreive songs from playlist").await;
+        return Ok(())
+    };
+
+    let songs = playlist.0;
+
+    media::commands::check_or_join_vc(ctx).await?;
+
+    media_playlist
+        .enqueue_batch(
+            ctx.guild_id().unwrap(),
+            songs.into_iter().collect::<LinkedList<MediaInfo>>(),
+            ctx.into(),
+        )
+        .await?;
+
+    media::commands::response::playlist_response(
+        ctx,
+        &playlist_name,
+        &ctx.author().name,
+        playlist.1,
+        &"".to_string(),
+        &"".to_string(),
+    )
+    .await;
+
     Ok(())
 }
 
@@ -170,14 +204,7 @@ mod response {
                             .collect::<Vec<String>>()
                             .join("\n")
                     ))
-                    .footer(|m| {
-                        m.text(format!(
-                            "Page {} of {}, total: {}",
-                            page,
-                            total / page_size + 1,
-                            total
-                        ))
-                    })
+                    .footer(|m| m.text(strings::page_display(page, total, page_size, &"playlist")))
                     .color(config::colors::playlist())
             })
         })

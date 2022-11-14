@@ -50,6 +50,50 @@ pub async fn play_single(
     media::commands::play_command(ctx, &song.join(" "), false).await
 }
 
+pub async fn check_or_join_vc(ctx: Context<'_>) -> Result<(), String> {
+    let guild = ctx.guild().unwrap();
+
+    let author_id = ctx.author().id;
+
+    // Join vc
+    let user_vc = match guild
+        .voice_states
+        .get(&author_id)
+        .and_then(|voice_state| voice_state.channel_id)
+    {
+        Some(vc) => vc,
+        None => {
+            ctx.error("Ur not even in a vc idio").await;
+            return Err("User not in vc".to_string());
+        }
+    };
+
+    match guild
+        .voice_states
+        .get(&ctx.discord().cache.current_user_id())
+        .and_then(|voice_state| voice_state.channel_id)
+    {
+        Some(bot_vc) => {
+            if bot_vc != user_vc {
+                ctx.error("Wrong channel dumbass").await;
+                return Err("Bot already in a different channel".to_string());
+            }
+        }
+        None => {
+            match join_channel(&get_media_player(ctx.discord()).await.unwrap(), ctx).await {
+                Ok(_) => (),
+                Err(err) => {
+                    ctx.error(&err).await;
+                    error!("{:?}", &err);
+                    return Err(format!("Unable to join channel: {:?}", &err));
+                }
+            };
+        }
+    };
+
+    Ok(())
+}
+
 pub async fn play_command(ctx: Context<'_>, url: &String, allow_playlist: bool) -> CommandResult {
     ctx.defer_ephemeral()
         .await
@@ -63,41 +107,7 @@ pub async fn play_command(ctx: Context<'_>, url: &String, allow_playlist: bool) 
 
     let message_ctx = MessageContext::from(ctx);
 
-    // Join vc
-    let user_vc = match guild
-        .voice_states
-        .get(&author_id)
-        .and_then(|voice_state| voice_state.channel_id)
-    {
-        Some(vc) => vc,
-        None => {
-            ctx.error("Ur not even in a vc idio").await;
-            return Ok(());
-        }
-    };
-
-    match guild
-        .voice_states
-        .get(&ctx.discord().cache.current_user_id())
-        .and_then(|voice_state| voice_state.channel_id)
-    {
-        Some(bot_vc) => {
-            if bot_vc != user_vc {
-                ctx.error("Wrong channel dumbass").await;
-                return Ok(());
-            }
-        }
-        None => {
-            match join_channel(&media_player, ctx).await {
-                Ok(_) => (),
-                Err(err) => {
-                    ctx.error(&err).await;
-                    error!("{:?}", &err);
-                    return Ok(());
-                }
-            };
-        }
-    }
+    check_or_join_vc(ctx).await?;
 
     // Get url
     if url.eq("") {
@@ -146,28 +156,15 @@ pub async fn play_command(ctx: Context<'_>, url: &String, allow_playlist: bool) 
                     None => (info.title, info.uploader),
                 };
 
-                ctx.send(|m| {
-                    m.content("").embed(|e| {
-                        e.title(&playlist_info.0)
-                            .description(format!(
-                                "Uploader: **{}**\nTracks: **{}**",
-                                if !playlist_info.1.is_empty() {
-                                    playlist_info.1
-                                } else {
-                                    "unknown".to_string()
-                                },
-                                count
-                            ))
-                            .author(|a| a.name("Queued playlist"))
-                            .thumbnail(&info.thumbnail)
-                            .url(&info.url)
-                            .color(config::colors::play())
-                    });
-
-                    m
-                })
-                .await
-                .expect("Failed to send message");
+                response::playlist_response(
+                    ctx,
+                    &playlist_info.0,
+                    &playlist_info.1,
+                    count,
+                    &info.thumbnail,
+                    &info.url,
+                )
+                .await;
             };
         }
         Err(err) => ctx.error(err).await,
@@ -219,8 +216,43 @@ async fn queue_variant(
     }
 }
 
-#[command(slash_command, prefix_command, broadcast_typing, category = "media")]
+pub mod response {
+    use super::*;
 
+    pub async fn playlist_response(
+        ctx: Context<'_>,
+        title: &String,
+        uploader: &String,
+        count: usize,
+        thumbnail: &String,
+        url: &String,
+    ) {
+        ctx.send(|m| {
+            m.content("").embed(|e| {
+                e.title(&title)
+                    .description(format!(
+                        "Uploader: **{}**\nTracks: **{}**",
+                        if !uploader.is_empty() {
+                            uploader.as_str()
+                        } else {
+                            &"unknown"
+                        },
+                        count
+                    ))
+                    .author(|a| a.name("Queued playlist"))
+                    .thumbnail(&thumbnail)
+                    .url(&url)
+                    .color(config::colors::play())
+            });
+
+            m
+        })
+        .await
+        .expect("Failed to send message");
+    }
+}
+
+#[command(slash_command, prefix_command, broadcast_typing, category = "media")]
 pub async fn skip(ctx: Context<'_>) -> CommandResult {
     let guild = ctx.guild().unwrap();
     let guild_id = guild.id;

@@ -100,14 +100,7 @@ where
             .collect::<Vec<String>>()
             .join("\n"),
     )
-    .footer(|f| {
-        f.text(format!(
-            "Page {} of {}, {} track(s)",
-            page + 1,
-            total / page_size + 1,
-            total
-        ))
-    });
+    .footer(|f| f.text(strings::page_display(page + 1, total, page_size, "track")));
 
     e
 }

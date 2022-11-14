@@ -449,7 +449,9 @@ impl DatabasePlugin for SQLitePlugin {
             "
             SELECT name
             FROM playlists
-            WHERE playlists.user_id=:user_id AND INSTR(lower(playlists.name), lower(:search)) > 0 AND playlists.name!='{HISTORY_PLAYLIST}'
+            WHERE playlists.user_id=:user_id 
+                AND INSTR(lower(playlists.name), lower(:search)) > 0 
+                AND playlists.name!='{HISTORY_PLAYLIST}'
             ORDER BY name ASC
             "
         ))?;

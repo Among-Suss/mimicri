@@ -88,6 +88,16 @@ pub fn is_url(text: &String) -> bool {
     text.starts_with("https://")
 }
 
+pub fn page_display(page: usize, total: usize, page_size: usize, units: &str) -> String {
+    format!(
+        "Page {} of {} | {} {}(s)",
+        page,
+        (total + page_size - 1) / page_size,
+        total,
+        units
+    )
+}
+
 pub struct Timestamp {
     pub seconds: i64,
     pub label: String,
