@@ -115,7 +115,6 @@ async fn main() {
                 media::commands::now_playing(),
                 media::commands::timestamp(),
                 database::commands::history(),
-                database::commands::play_history(),
                 database::commands::playlists(),
                 controls::commands::join(),
                 controls::commands::leave(),
@@ -142,7 +141,7 @@ async fn main() {
 
 // Misc and tools
 
-#[command(slash_command, prefix_command, aliases("v"), category = "debug")]
+#[command(prefix_command, aliases("v"), category = "debug")]
 async fn version(ctx: Context<'_>) -> CommandResult {
     ctx.info(format!("Version: {}", env!("VERGEN_GIT_SEMVER")))
         .await;
@@ -158,6 +157,7 @@ async fn register(ctx: Context<'_>) -> CommandResult {
     Ok(())
 }
 
+/// Show help
 #[command(prefix_command, track_edits, slash_command)]
 async fn help(
     ctx: Context<'_>,

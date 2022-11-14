@@ -1,4 +1,4 @@
-use poise::command;
+use poise::{command, serenity_prelude::CreateEmbed};
 use serenity::model::prelude::GuildId;
 use tracing::{error, warn};
 
@@ -10,7 +10,7 @@ use crate::{
         self, config,
         message_context::MessageContext,
         responses::{self, Responses},
-        strings,
+        strings, validate_page,
     },
     CommandResult, Context,
 };
@@ -19,6 +19,8 @@ use super::{global_media_player::GlobalMediaPlayer, media_info::MediaInfo};
 use super::{metadata, plugin::get_media_player};
 
 // Write commands
+
+/// Queue a song
 #[command(
     slash_command,
     prefix_command,
@@ -35,6 +37,7 @@ pub async fn play(
     media::commands::play_command(ctx, &song, true).await
 }
 
+/// Queue a single song, ignoring playlists
 #[command(
     slash_command,
     prefix_command,
@@ -252,6 +255,7 @@ pub mod response {
     }
 }
 
+/// Skip the current song
 #[command(slash_command, prefix_command, broadcast_typing, category = "media")]
 pub async fn skip(ctx: Context<'_>) -> CommandResult {
     let guild = ctx.guild().unwrap();
@@ -271,6 +275,7 @@ pub async fn skip(ctx: Context<'_>) -> CommandResult {
     Ok(())
 }
 
+/// Jump to a time in the current song
 #[command(slash_command, prefix_command, category = "media")]
 pub async fn seek(ctx: Context<'_>, to: String) -> CommandResult {
     let media_player = get_media_player(ctx.discord()).await.unwrap();
@@ -308,6 +313,8 @@ pub async fn seek(ctx: Context<'_>, to: String) -> CommandResult {
 }
 
 // Read commands
+
+/// Show the song queue
 #[command(slash_command, prefix_command, category = "media")]
 pub async fn queue(
     ctx: Context<'_>,
@@ -315,44 +322,50 @@ pub async fn queue(
     #[min = 1]
     page: Option<i64>,
 ) -> CommandResult {
-    let Some(page) = utils::validate_page(ctx, page).await else {
-        return Ok(());
-    };
-
-    let media_player = get_media_player(ctx.discord()).await.unwrap();
+    let initial_page = validate_page(ctx, page).await?;
 
     let guild = ctx.guild().unwrap();
     let guild_id = guild.id;
 
     let queue_page_size = config::queue::page_size(guild_id);
 
-    let res = media_player
-        .read_queue(guild_id, page * queue_page_size, queue_page_size)
-        .await;
+    responses::create_pagination(ctx, initial_page, |next_page| async move {
+        let media_player = get_media_player(ctx.discord()).await.unwrap();
 
-    match res {
-        Ok((queue, len)) => {
-            if len == 0 {
-                ctx.info("The queue is empty!").await;
-                return Ok(());
-            }
+        let res = media_player
+            .read_queue(guild_id, next_page * queue_page_size, queue_page_size)
+            .await;
 
-            ctx.send(|m| {
-                m.content("").embed(|e| {
-                    responses::format_embed_playlist(e, queue.iter(), len, guild_id, page)
+        match res {
+            Ok((queue, len)) => {
+                if len == 0 {
+                    Err("The queue is empty".to_string())
+                } else {
+                    Ok((
+                        responses::format_embed_playlist(
+                            &mut CreateEmbed::default(),
+                            queue.iter(),
+                            len,
+                            guild_id,
+                            next_page,
+                        )
                         .title("Queue")
                         .color(config::colors::queue())
-                })
-            })
-            .await
-            .expect("Failed to send message");
+                        .to_owned(),
+                        next_page,
+                        utils::ceil(len, queue_page_size),
+                    ))
+                }
+            }
+            Err(err) => Err(format!("{}", err)),
         }
-        Err(err) => ctx.error(err).await,
-    }
+    })
+    .await?;
 
     Ok(())
 }
 
+/// Get the currently playing song
 #[command(
     slash_command,
     prefix_command,
@@ -402,6 +415,7 @@ pub async fn now_playing(ctx: Context<'_>) -> CommandResult {
     Ok(())
 }
 
+/// List the timestamps of the song
 #[command(slash_command, prefix_command, category = "media")]
 pub async fn timestamp(ctx: Context<'_>) -> CommandResult {
     let media_player = get_media_player(ctx.discord()).await.unwrap();

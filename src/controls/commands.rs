@@ -2,6 +2,7 @@ use poise::command;
 
 use crate::{media::plugin::get_media_player, utils::responses::Responses, CommandResult, Context};
 
+/// Join your VC
 #[command(slash_command, prefix_command, category = "controls")]
 pub async fn join(ctx: Context<'_>) -> CommandResult {
     let media_player = get_media_player(ctx.discord()).await.unwrap();
@@ -9,6 +10,7 @@ pub async fn join(ctx: Context<'_>) -> CommandResult {
     super::join_channel(&media_player, ctx).await
 }
 
+/// Leave the VC
 #[command(slash_command, prefix_command, category = "controls")]
 pub async fn leave(ctx: Context<'_>) -> CommandResult {
     let media_player = get_media_player(ctx.discord()).await.unwrap();
@@ -40,6 +42,7 @@ pub async fn leave(ctx: Context<'_>) -> CommandResult {
     Ok(())
 }
 
+/// Mute the bot
 #[command(slash_command, prefix_command, category = "controls")]
 pub async fn mute(ctx: Context<'_>) -> CommandResult {
     let guild_id = ctx.guild_id().unwrap();
@@ -73,6 +76,7 @@ pub async fn mute(ctx: Context<'_>) -> CommandResult {
     Ok(())
 }
 
+/// Deafen the bot
 #[command(slash_command, prefix_command, category = "controls")]
 pub async fn deafen(ctx: Context<'_>) -> CommandResult {
     let guild_id = ctx.guild_id().unwrap();
@@ -106,6 +110,7 @@ pub async fn deafen(ctx: Context<'_>) -> CommandResult {
     Ok(())
 }
 
+/// Unmute the bot
 #[command(slash_command, prefix_command, category = "controls")]
 pub async fn unmute(ctx: Context<'_>) -> CommandResult {
     let guild_id = ctx.guild_id().unwrap();
@@ -129,6 +134,7 @@ pub async fn unmute(ctx: Context<'_>) -> CommandResult {
     Ok(())
 }
 
+/// Undeafen the bot
 #[command(slash_command, prefix_command, category = "controls")]
 pub async fn undeafen(ctx: Context<'_>) -> CommandResult {
     let guild_id = ctx.guild_id().unwrap();

@@ -5,7 +5,8 @@ use serenity::model::prelude::AttachmentType;
 
 use crate::{utils::responses::Responses, CommandResult, Context};
 
-#[command(slash_command, prefix_command, category = "debug")]
+/// Print the log. Use --help to see args
+#[command(prefix_command, category = "debug")]
 pub async fn log(ctx: Context<'_>, #[rest] args: String) -> CommandResult {
     let mut level = "".to_string();
     let mut target = "".to_string();
@@ -51,7 +52,8 @@ pub async fn log(ctx: Context<'_>, #[rest] args: String) -> CommandResult {
     Ok(())
 }
 
-#[command(slash_command, prefix_command, rename = "log-file", category = "debug")]
+/// Get the log file
+#[command(prefix_command, rename = "log-file", category = "debug")]
 pub async fn log_file(ctx: Context<'_>) -> CommandResult {
     let log_file = super::get_log_filename();
 

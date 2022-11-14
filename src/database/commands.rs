@@ -1,6 +1,6 @@
 use std::{collections::LinkedList, sync::Arc};
 
-use poise::command;
+use poise::{command, serenity_prelude::CreateEmbed};
 use tracing::error;
 
 use crate::{
@@ -8,7 +8,7 @@ use crate::{
     utils::{
         self, config,
         responses::{self, Responses},
-        strings,
+        strings, validate_page,
     },
     CommandResult, Context,
 };
@@ -21,12 +21,50 @@ use super::plugin::{get_db_plugin, DatabasePlugin};
     slash_command,
     prefix_command,
     category = "playlists",
-    subcommands("create_playlist", "get_playlists", "play_playlist")
+    subcommands("list_playlists", "create_playlist", "play_playlist", "show_playlist")
 )]
-pub async fn playlists(_ctx: Context<'_>) -> CommandResult {
+pub async fn playlists(ctx: Context<'_>, #[min = 1] page: Option<i64>) -> CommandResult {
+    _list_playlists(ctx, page).await
+}
+
+/// Lists your playlists
+#[command(slash_command, prefix_command, rename = "list", category = "playlists")]
+pub async fn list_playlists(ctx: Context<'_>, #[min = 1] page: Option<i64>) -> CommandResult {
+    _list_playlists(ctx, page).await
+}
+
+async fn _list_playlists(ctx: Context<'_>, page: Option<i64>) -> CommandResult {
+    let page = validate_page(ctx, page).await?;
+
+    let page_size = config::queue::page_size(ctx.guild_id().unwrap());
+
+    responses::create_pagination(ctx, page, |next_page| async move {
+        let db = get_db(ctx).await?;
+
+        let (playlists, count) = db
+            .get_playlists(ctx.author().id, page_size, page * page_size)
+            .expect("DB Plugin disabled"); // FIXME I'm lazy
+
+        Ok((
+            response::print_playlists(
+                &mut CreateEmbed::default(),
+                &format!("{}'s playlists", ctx.author().name).to_string(),
+                playlists,
+                page,
+                count,
+                page_size,
+            )
+            .to_owned(),
+            next_page,
+            utils::ceil(count, page_size),
+        ))
+    })
+    .await?;
+
     Ok(())
 }
 
+/// Create a playlist
 #[command(slash_command, prefix_command, rename = "create")]
 async fn create_playlist(
     ctx: Context<'_>,
@@ -108,23 +146,7 @@ async fn create_playlist(
     Ok(())
 }
 
-#[command(slash_command, prefix_command, rename = "get")]
-async fn get_playlists(ctx: Context<'_>, #[min = 1] page: Option<usize>) -> CommandResult {
-    let page = page.unwrap_or(1);
-
-    let db = get_db(ctx).await?;
-
-    let page_size = config::queue::page_size(ctx.guild_id().unwrap());
-
-    let (playlists, count) = db
-        .get_playlists(ctx.author().id, page_size, (page - 1) * page_size)
-        .expect("DB Plugin disabled"); // FIXME I'm lazy
-
-    response::get_playlist(ctx, playlists, page, count, page_size).await?;
-
-    Ok(())
-}
-
+/// Queue all tracks from a playlist
 #[command(slash_command, prefix_command, rename = "play", category = "playlists")]
 async fn play_playlist(
     ctx: Context<'_>,
@@ -169,6 +191,68 @@ async fn play_playlist(
     Ok(())
 }
 
+/// View tracks of a playlist
+#[command(
+    slash_command,
+    prefix_command,
+    rename = "tracks",
+    category = "playlists"
+)]
+pub async fn show_playlist(
+    ctx: Context<'_>,
+    #[autocomplete = "autocomplete_playlists"] playlist: String,
+    #[description = "Page #"]
+    #[min = 1]
+    page: Option<i64>,
+) -> CommandResult {
+    let initial_page = validate_page(ctx, page).await?;
+
+    let playlist_name = &playlist.clone();
+
+    let guild = ctx.guild().unwrap();
+    let guild_id = guild.id;
+
+    let page_size = config::queue::page_size(guild_id);
+
+    responses::create_pagination(ctx, initial_page, |next_page| async move {
+        let db = get_db(ctx).await?;
+
+        let res = db.get_playlist(
+            ctx.author().id,
+            playlist_name,
+            page_size,
+            next_page * page_size,
+        );
+
+        match res {
+            Ok((queue, len)) => {
+                if len == 0 {
+                    Err("The queue is empty".to_string())
+                } else {
+                    Ok((
+                        responses::format_embed_playlist(
+                            &mut CreateEmbed::default(),
+                            queue.iter(),
+                            len,
+                            guild_id,
+                            next_page,
+                        )
+                        .title(format!("{} ({})", playlist_name, ctx.author().name))
+                        .color(config::colors::playlist())
+                        .to_owned(),
+                        next_page,
+                        (len + page_size - 1) / page_size,
+                    ))
+                }
+            }
+            Err(err) => Err(format!("{}", err)),
+        }
+    })
+    .await?;
+
+    Ok(())
+}
+
 async fn autocomplete_playlists<'a>(
     ctx: Context<'_>,
     partial: &'a str,
@@ -182,96 +266,83 @@ async fn autocomplete_playlists<'a>(
         .into_iter()
 }
 
-mod response {
-    use super::*;
-
-    pub async fn get_playlist(
-        ctx: Context<'_>,
-        playlists: Vec<String>,
-        page: usize,
-        total: usize,
-        page_size: usize,
-    ) -> CommandResult {
-        ctx.send(|m| {
-            m.embed(|e| {
-                e.title(format!("{}'s playlist", ctx.author().name))
-                    .description(format!(
-                        "{}",
-                        playlists
-                            .into_iter()
-                            .enumerate()
-                            .map(|(i, p)| format!("{}. **{}**", i + 1, p))
-                            .collect::<Vec<String>>()
-                            .join("\n")
-                    ))
-                    .footer(|m| m.text(strings::page_display(page, total, page_size, &"playlist")))
-                    .color(config::colors::playlist())
-            })
-        })
-        .await?;
-
-        Ok(())
-    }
-}
-
 // History
-#[command(slash_command, prefix_command, category = "playlists")]
+#[command(
+    slash_command,
+    prefix_command,
+    category = "playlists",
+    subcommands("list_history", "queue_history")
+)]
 pub async fn history(
     ctx: Context<'_>,
     #[description = "Page #"]
     #[min = 1]
     page: Option<i64>,
 ) -> CommandResult {
-    let Some(page) = utils::validate_page(ctx,page).await else {
-        return Ok(());
-    };
+    _list_history(ctx, page).await
+}
 
-    let guild_id = ctx.guild().unwrap().id;
+/// Show your history
+#[command(slash_command, prefix_command, rename = "show", category = "playlists")]
+async fn list_history(
+    ctx: Context<'_>,
+    #[description = "Page #"]
+    #[min = 1]
+    page: Option<i64>,
+) -> CommandResult {
+    _list_history(ctx, page).await
+}
+
+async fn _list_history(ctx: Context<'_>, page: Option<i64>) -> CommandResult {
+    let initial_page = validate_page(ctx, page).await?;
+
+    let guild = ctx.guild().unwrap();
+    let guild_id = guild.id;
 
     let page_size = config::queue::page_size(guild_id);
-    let queue_text_len = config::queue::text_length(guild_id);
 
-    if let Some(db_plugin) = get_db_plugin(ctx.discord()).await {
-        if let Ok((history, count)) =
-            db_plugin.get_history(ctx.author().id, page_size, page * page_size)
-        {
-            let mut description = String::new();
+    responses::create_pagination(ctx, initial_page, |next_page| async move {
+        let db = get_db(ctx).await?;
 
-            for (i, info) in history.iter().enumerate() {
-                description += &format!(
-                    "{}. **{}**  [↗️]({})\n",
-                    i + 1,
-                    strings::escape_string(&strings::limit_string_length(
-                        &info.title,
-                        queue_text_len
-                    )),
-                    info.url
-                )
-                .to_string();
-            }
-            ctx.send(|m| {
-                m.content("").embed(|e| {
-                    responses::format_embed_playlist(e, history.iter(), count, guild_id, page)
-                        .title(format!("{}'s History", ctx.author().name))
+        let res = db.get_history(ctx.author().id, page_size, next_page * page_size);
+
+        match res {
+            Ok((queue, len)) => {
+                if len == 0 {
+                    Err("The queue is empty".to_string())
+                } else {
+                    Ok((
+                        responses::format_embed_playlist(
+                            &mut CreateEmbed::default(),
+                            queue.iter(),
+                            len,
+                            guild_id,
+                            next_page,
+                        )
+                        .title(format!("{}'s history", ctx.author().name))
                         .color(config::colors::history())
-                })
-            })
-            .await
-            .expect("Failed to send message");
-        } else {
-            ctx.error("Database error, unable to fetch history.").await;
+                        .to_owned(),
+                        next_page,
+                        (len + page_size - 1) / page_size,
+                    ))
+                }
+            }
+            Err(err) => Err(format!("{}", err)),
         }
-    }
+    })
+    .await?;
+
     Ok(())
 }
 
+/// Queue a song from your history
 #[command(
     slash_command,
     prefix_command,
-    rename = "play-history",
+    rename = "queue",
     category = "playlists"
 )]
-pub async fn play_history(
+async fn queue_history(
     ctx: Context<'_>,
     #[description = "Index #"]
     #[min = 1]
@@ -282,32 +353,26 @@ pub async fn play_history(
         return Ok(());
     }
 
-    if let Some(song) = get_history(ctx, index as usize - 1).await {
-        return media::commands::play_command(ctx, &song, false).await;
+    let db = get_db(ctx).await?;
+
+    if let Ok((history, count)) = db.get_history(ctx.author().id, 1, (index - 1) as usize) {
+        if history.len() > 0 {
+            media::commands::play_command(ctx, &history[0].url.clone(), false).await?;
+        } else {
+            ctx.warn(format!(
+                "Song index not found. History contains {} songs.",
+                count
+            ))
+            .await;
+        }
+    } else {
+        ctx.error("Unable to load history").await;
     }
 
     Ok(())
 }
 
-pub async fn get_history(ctx: Context<'_>, page: usize) -> Option<String> {
-    if let Some(db_plugin) = get_db_plugin(ctx.discord()).await {
-        if let Ok((history, count)) = db_plugin.get_history(ctx.author().id, 1, page) {
-            if history.len() > 0 {
-                return Some(history[0].url.clone());
-            } else {
-                ctx.warn(format!(
-                    "Song index not found. History contains {} songs.",
-                    count
-                ))
-                .await;
-            }
-        } else {
-            ctx.error("Unable to load history").await;
-        }
-    }
-
-    None
-}
+// Helpers
 
 async fn get_db(ctx: Context<'_>) -> Result<Arc<dyn DatabasePlugin>, String> {
     let db = get_db_plugin(ctx.discord())
@@ -321,4 +386,37 @@ async fn get_db(ctx: Context<'_>) -> Result<Arc<dyn DatabasePlugin>, String> {
     }
 
     Ok(db)
+}
+
+mod response {
+    use super::*;
+
+    pub fn print_playlists<'a>(
+        e: &'a mut CreateEmbed,
+        title: &String,
+        playlists: Vec<String>,
+        page: usize,
+        total: usize,
+        page_size: usize,
+    ) -> &'a mut CreateEmbed {
+        e.title(format!("{}", title))
+            .description(format!(
+                "{}",
+                playlists
+                    .into_iter()
+                    .enumerate()
+                    .map(|(i, p)| format!("{}. **{}**", i + 1, p))
+                    .collect::<Vec<String>>()
+                    .join("\n")
+            ))
+            .footer(|m| {
+                m.text(strings::page_display(
+                    page + 1,
+                    total,
+                    page_size,
+                    &"playlist",
+                ))
+            })
+            .color(config::colors::playlist())
+    }
 }

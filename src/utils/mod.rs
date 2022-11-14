@@ -9,7 +9,7 @@ pub mod responses;
 pub mod strings;
 
 // Util
-pub async fn validate_page(ctx: Context<'_>, page: Option<i64>) -> Option<usize> {
+pub async fn validate_page(ctx: Context<'_>, page: Option<i64>) -> Result<usize, String> {
     let page = match page {
         Some(page) => page,
         None => 1,
@@ -17,8 +17,12 @@ pub async fn validate_page(ctx: Context<'_>, page: Option<i64>) -> Option<usize>
 
     if page <= 0 {
         ctx.warn("Page no must be atleast 1").await;
-        return None;
+        return Err("Page no must be atleast 1".to_string());
     }
 
-    Some(page as usize - 1)
+    Ok(page as usize - 1)
+}
+
+pub fn ceil(a: usize, b: usize) -> usize {
+    (a + b - 1) / b
 }
