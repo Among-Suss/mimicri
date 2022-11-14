@@ -401,20 +401,16 @@ impl DatabasePlugin for SQLitePlugin {
         let connection = self.get_connection()?;
 
         // Get playlists
-        let mut statement = connection.prepare(
+        let mut statement = connection.prepare(&format!(
             "
             SELECT name
             FROM playlists
-            WHERE playlists.user_id=(
-                SELECT id
-                FROM users
-                WHERE id=:user_id
-            )
+            WHERE playlists.user_id=:user_id AND playlists.name!='{HISTORY_PLAYLIST}'
             ORDER BY id DESC
             LIMIT :limit
             OFFSET :offset
-            ",
-        )?;
+            "
+        ))?;
 
         let query = statement.query_map(
             named_params! { ":user_id": user_id.as_u64(), ":limit": amount, ":offset": offset },
@@ -424,13 +420,13 @@ impl DatabasePlugin for SQLitePlugin {
         let playlists: Vec<String> = query.filter_map(|m| m.ok()).collect();
 
         // Get size
-        let mut statement = connection.prepare(
+        let mut statement = connection.prepare(&format!(
             "
             SELECT count(*)
             FROM playlists
             WHERE playlists.user_id=?1 AND playlists.name!='{HISTORY_PLAYLIST}'
-            ",
-        )?;
+            "
+        ))?;
 
         let size: i64 = statement
             .query(params![user_id.as_u64()])?
@@ -439,6 +435,31 @@ impl DatabasePlugin for SQLitePlugin {
             .get(0)?;
 
         Ok((playlists, size as usize))
+    }
+
+    fn search_playlists(
+        &self,
+        user_id: UserId,
+        search_term: &String,
+    ) -> Result<Vec<String>, DBError> {
+        let connection = self.get_connection()?;
+
+        // Get playlists
+        let mut statement = connection.prepare(&format!(
+            "
+            SELECT name
+            FROM playlists
+            WHERE playlists.user_id=:user_id AND INSTR(lower(playlists.name), lower(:search)) > 0 AND playlists.name!='{HISTORY_PLAYLIST}'
+            ORDER BY name ASC
+            "
+        ))?;
+
+        let query = statement.query_map(
+            named_params! { ":user_id": user_id.as_u64(), ":search": search_term },
+            |r| r.get::<_, String>(0),
+        )?;
+
+        Ok(query.filter_map(|m| m.ok()).collect::<Vec<String>>())
     }
 }
 

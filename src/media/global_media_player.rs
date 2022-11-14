@@ -1,5 +1,4 @@
-use serenity::async_trait;
-use serenity::model::prelude::GuildId;
+use poise::serenity_prelude::{self as serenity, async_trait, GuildId};
 use songbird::input::{Input, Restartable};
 use songbird::tracks::TrackHandle;
 use songbird::{Call, Event, EventContext, EventHandler};
@@ -62,7 +61,7 @@ impl GlobalMediaPlayer {
     pub async fn start(
         &self,
         guild_id: GuildId,
-        voice_channel_handler: Arc<serenity::prelude::Mutex<Call>>,
+        voice_channel_handler: Arc<serenity::Mutex<Call>>,
     ) -> Result<(), String> {
         let mut guild_map_guard = self.guild_media_player_map.lock().await;
         let guild_map = guild_map_guard.as_mut().unwrap();
@@ -199,7 +198,7 @@ impl EventHandler for MediaEventHandler {
 impl ChannelMediaPlayer {
     fn create_and_initialize(
         guild_id: GuildId,
-        voice_channel_handler: Arc<serenity::prelude::Mutex<Call>>,
+        voice_channel_handler: Arc<serenity::Mutex<Call>>,
     ) -> Arc<Self> {
         let media_player = Arc::new(ChannelMediaPlayer {
             guild_id,
@@ -384,7 +383,7 @@ impl ChannelMediaPlayer {
     }
 
     async fn media_player_run(
-        voice_channel_handler: Arc<serenity::prelude::Mutex<Call>>,
+        voice_channel_handler: Arc<serenity::Mutex<Call>>,
         shared_channel_media_player: Arc<ChannelMediaPlayer>,
     ) {
         let (shared_media_queue_lock, shared_media_queue_condvar) =

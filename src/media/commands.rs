@@ -1,11 +1,13 @@
+use poise::command;
 use serenity::model::prelude::GuildId;
 use tracing::{error, warn};
 
 use crate::{
-    controls::join,
+    controls::join_channel,
     database::plugin::get_db_plugin,
+    media,
     utils::{
-        config,
+        self, config,
         message_context::MessageContext,
         responses::{self, Responses},
         strings,
@@ -13,20 +15,47 @@ use crate::{
     CommandResult, Context,
 };
 
-use super::metadata;
 use super::{global_media_player::GlobalMediaPlayer, media_info::MediaInfo};
+use super::{metadata, plugin::get_media_player};
 
 // Write commands
-
-pub async fn play_command(
-    media_player: &GlobalMediaPlayer,
+#[command(
+    slash_command,
+    prefix_command,
+    aliases("p"),
+    broadcast_typing,
+    category = "media"
+)]
+pub async fn play(
     ctx: Context<'_>,
-    url: &String,
-    allow_playlist: bool,
+    #[description = "Query or url"]
+    #[rest]
+    song: String,
 ) -> CommandResult {
+    media::commands::play_command(ctx, &song, true).await
+}
+
+#[command(
+    slash_command,
+    prefix_command,
+    rename = "play-single",
+    aliases("ps"),
+    broadcast_typing,
+    category = "media"
+)]
+pub async fn play_single(
+    ctx: Context<'_>,
+    #[description = "Query or url"] song: Vec<String>,
+) -> CommandResult {
+    media::commands::play_command(ctx, &song.join(" "), false).await
+}
+
+pub async fn play_command(ctx: Context<'_>, url: &String, allow_playlist: bool) -> CommandResult {
     ctx.defer_ephemeral()
         .await
         .expect("Failed to defer message");
+
+    let media_player = get_media_player(ctx.discord()).await.unwrap();
 
     let guild = ctx.guild().unwrap();
 
@@ -59,7 +88,7 @@ pub async fn play_command(
             }
         }
         None => {
-            match join(media_player, ctx).await {
+            match join_channel(&media_player, ctx).await {
                 Ok(_) => (),
                 Err(err) => {
                     ctx.error(&err).await;
@@ -79,7 +108,7 @@ pub async fn play_command(
 
     let db_plugin = get_db_plugin(ctx.discord()).await.unwrap().clone();
 
-    match queue_variant(guild.id, &url, message_ctx, media_player, allow_playlist).await {
+    match queue_variant(guild.id, &url, message_ctx, &media_player, allow_playlist).await {
         Ok(infos) => {
             let count = infos.len();
 
@@ -190,11 +219,17 @@ async fn queue_variant(
     }
 }
 
-pub async fn skip(media_player: &GlobalMediaPlayer, ctx: Context<'_>) -> CommandResult {
+#[command(slash_command, prefix_command, broadcast_typing, category = "media")]
+
+pub async fn skip(ctx: Context<'_>) -> CommandResult {
     let guild = ctx.guild().unwrap();
     let guild_id = guild.id;
 
-    let res = media_player.skip(guild_id).await;
+    let res = get_media_player(ctx.discord())
+        .await
+        .unwrap()
+        .skip(guild_id)
+        .await;
 
     match res {
         Ok(_) => ctx.info("Skipped current song!").await,
@@ -204,11 +239,10 @@ pub async fn skip(media_player: &GlobalMediaPlayer, ctx: Context<'_>) -> Command
     Ok(())
 }
 
-pub async fn seek(
-    media_player: &GlobalMediaPlayer,
-    ctx: Context<'_>,
-    to: &String,
-) -> CommandResult {
+#[command(slash_command, prefix_command, category = "media")]
+pub async fn seek(ctx: Context<'_>, to: String) -> CommandResult {
+    let media_player = get_media_player(ctx.discord()).await.unwrap();
+
     let guild_id = ctx.guild().unwrap().id;
 
     let time = if let Ok(seconds) = to.parse::<i64>() {
@@ -242,12 +276,19 @@ pub async fn seek(
 }
 
 // Read commands
-
+#[command(slash_command, prefix_command, category = "media")]
 pub async fn queue(
-    media_player: &GlobalMediaPlayer,
     ctx: Context<'_>,
-    page: usize,
+    #[description = "Page #"]
+    #[min = 1]
+    page: Option<i64>,
 ) -> CommandResult {
+    let Some(page) = utils::validate_page(ctx, page).await else {
+        return Ok(());
+    };
+
+    let media_player = get_media_player(ctx.discord()).await.unwrap();
+
     let guild = ctx.guild().unwrap();
     let guild_id = guild.id;
 
@@ -280,7 +321,16 @@ pub async fn queue(
     Ok(())
 }
 
-pub async fn now_playing(media_player: &GlobalMediaPlayer, ctx: Context<'_>) -> CommandResult {
+#[command(
+    slash_command,
+    prefix_command,
+    rename = "now-playing",
+    aliases("np"),
+    category = "media"
+)]
+pub async fn now_playing(ctx: Context<'_>) -> CommandResult {
+    let media_player = get_media_player(ctx.discord()).await.unwrap();
+
     let guild = ctx.guild().unwrap();
     let guild_id = guild.id;
 
@@ -320,7 +370,10 @@ pub async fn now_playing(media_player: &GlobalMediaPlayer, ctx: Context<'_>) -> 
     Ok(())
 }
 
-pub async fn timestamp(media_player: &GlobalMediaPlayer, ctx: Context<'_>) -> CommandResult {
+#[command(slash_command, prefix_command, category = "media")]
+pub async fn timestamp(ctx: Context<'_>) -> CommandResult {
+    let media_player = get_media_player(ctx.discord()).await.unwrap();
+
     let guild = ctx.guild().unwrap();
     let guild_id = guild.id;
 

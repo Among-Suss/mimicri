@@ -4,9 +4,9 @@ use poise::command;
 use tracing::error;
 
 use crate::{
-    media::{media_info::MediaInfo, metadata},
+    media::{self, media_info::MediaInfo, metadata},
     utils::{
-        config,
+        self, config,
         responses::{self, Responses},
         strings,
     },
@@ -21,7 +21,7 @@ use super::plugin::{get_db_plugin, DatabasePlugin};
     slash_command,
     prefix_command,
     category = "playlists",
-    subcommands("create_playlist", "get_playlists")
+    subcommands("create_playlist", "get_playlists", "play_playlist")
 )]
 pub async fn playlists(_ctx: Context<'_>) -> CommandResult {
     Ok(())
@@ -109,7 +109,9 @@ async fn create_playlist(
 }
 
 #[command(slash_command, prefix_command, rename = "get")]
-async fn get_playlists(ctx: Context<'_>, #[min = 1] page: usize) -> CommandResult {
+async fn get_playlists(ctx: Context<'_>, #[min = 1] page: Option<usize>) -> CommandResult {
+    let page = page.unwrap_or(1);
+
     let db = get_db(ctx).await?;
 
     let page_size = config::queue::page_size(ctx.guild_id().unwrap());
@@ -121,6 +123,29 @@ async fn get_playlists(ctx: Context<'_>, #[min = 1] page: usize) -> CommandResul
     response::get_playlist(ctx, playlists, page, count, page_size).await?;
 
     Ok(())
+}
+
+#[command(slash_command, prefix_command, rename = "play", category = "playlists")]
+async fn play_playlist(
+    ctx: Context<'_>,
+    #[description = "Playlist"]
+    #[autocomplete = "autocomplete_playlists"]
+    playlist: String,
+) -> CommandResult {
+    Ok(())
+}
+
+async fn autocomplete_playlists<'a>(
+    ctx: Context<'_>,
+    partial: &'a str,
+) -> impl Iterator<Item = String> + 'a {
+    let Some(db) = get_db_plugin(ctx.discord()).await else {
+        return vec![].into_iter();
+    };
+
+    db.search_playlists(ctx.author().id, &partial.to_string())
+        .unwrap()
+        .into_iter()
 }
 
 mod response {
@@ -163,8 +188,17 @@ mod response {
 }
 
 // History
+#[command(slash_command, prefix_command, category = "playlists")]
+pub async fn history(
+    ctx: Context<'_>,
+    #[description = "Page #"]
+    #[min = 1]
+    page: Option<i64>,
+) -> CommandResult {
+    let Some(page) = utils::validate_page(ctx,page).await else {
+        return Ok(());
+    };
 
-pub async fn history(ctx: Context<'_>, page: usize) -> CommandResult {
     let guild_id = ctx.guild().unwrap().id;
 
     let page_size = config::queue::page_size(guild_id);
@@ -201,6 +235,30 @@ pub async fn history(ctx: Context<'_>, page: usize) -> CommandResult {
             ctx.error("Database error, unable to fetch history.").await;
         }
     }
+    Ok(())
+}
+
+#[command(
+    slash_command,
+    prefix_command,
+    rename = "play-history",
+    category = "playlists"
+)]
+pub async fn play_history(
+    ctx: Context<'_>,
+    #[description = "Index #"]
+    #[min = 1]
+    index: i64,
+) -> CommandResult {
+    if index < 1 {
+        ctx.error("Index cannot be less than 1").await;
+        return Ok(());
+    }
+
+    if let Some(song) = get_history(ctx, index as usize - 1).await {
+        return media::commands::play_command(ctx, &song, false).await;
+    }
+
     Ok(())
 }
 

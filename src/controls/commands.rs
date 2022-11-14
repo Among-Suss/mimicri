@@ -1,6 +1,44 @@
 use poise::command;
 
-use super::*;
+use crate::{media::plugin::get_media_player, utils::responses::Responses, CommandResult, Context};
+
+#[command(slash_command, prefix_command, category = "controls")]
+pub async fn join(ctx: Context<'_>) -> CommandResult {
+    let media_player = get_media_player(ctx.discord()).await.unwrap();
+
+    super::join_channel(&media_player, ctx).await
+}
+
+#[command(slash_command, prefix_command, category = "controls")]
+pub async fn leave(ctx: Context<'_>) -> CommandResult {
+    let media_player = get_media_player(ctx.discord()).await.unwrap();
+
+    let guild_id = ctx.guild_id().unwrap();
+
+    let manager = songbird::get(ctx.discord())
+        .await
+        .expect("Songbird Voice client placed in at initialisation.")
+        .clone();
+    let has_handler = manager.get(guild_id).is_some();
+
+    if has_handler {
+        let res = media_player.quit(guild_id).await;
+        match res {
+            Ok(_) => (),
+            Err(err) => ctx.warn(err).await,
+        }
+
+        if let Err(err) = manager.remove(guild_id).await {
+            ctx.error(format!("Failed: {:?}", err)).await;
+        }
+
+        ctx.info("Left voice channel").await;
+    } else {
+        ctx.info("Not in a voice channel").await;
+    }
+
+    Ok(())
+}
 
 #[command(slash_command, prefix_command, category = "controls")]
 pub async fn mute(ctx: Context<'_>) -> CommandResult {

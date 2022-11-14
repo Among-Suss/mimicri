@@ -5,7 +5,7 @@ use crate::{
     Context,
 };
 
-pub async fn join(media_player: &GlobalMediaPlayer, ctx: Context<'_>) -> CommandResult {
+pub async fn join_channel(media_player: &GlobalMediaPlayer, ctx: Context<'_>) -> CommandResult {
     let guild = ctx.guild().unwrap();
     let guild_id = guild.id;
 
@@ -38,34 +38,6 @@ pub async fn join(media_player: &GlobalMediaPlayer, ctx: Context<'_>) -> Command
                 ctx.warn(err).await;
             }
         }
-    }
-
-    Ok(())
-}
-
-pub async fn leave(media_player: &GlobalMediaPlayer, ctx: Context<'_>) -> CommandResult {
-    let guild_id = ctx.guild_id().unwrap();
-
-    let manager = songbird::get(ctx.discord())
-        .await
-        .expect("Songbird Voice client placed in at initialisation.")
-        .clone();
-    let has_handler = manager.get(guild_id).is_some();
-
-    if has_handler {
-        let res = media_player.quit(guild_id).await;
-        match res {
-            Ok(_) => (),
-            Err(err) => ctx.warn(err).await,
-        }
-
-        if let Err(err) = manager.remove(guild_id).await {
-            ctx.error(format!("Failed: {:?}", err)).await;
-        }
-
-        ctx.info("Left voice channel").await;
-    } else {
-        ctx.info("Not in a voice channel").await;
     }
 
     Ok(())

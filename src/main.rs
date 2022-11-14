@@ -5,7 +5,7 @@ mod media;
 mod utils;
 
 use dotenv::dotenv;
-use media::global_media_player::GlobalMediaPlayer;
+use media::{global_media_player::GlobalMediaPlayer, plugin::GlobalMediaPlayerPluginInit};
 use poise::{command, serenity_prelude as serenity};
 use songbird::SerenityInit;
 use std::{env, sync::Arc};
@@ -23,8 +23,6 @@ pub type CommandResult = Result<(), Error>;
 type Context<'a> = poise::Context<'a, UserData, Error>;
 pub struct UserData {}
 
-static GLOBAL_MEDIA_PLAYER: GlobalMediaPlayer = GlobalMediaPlayer::UNINITIALIZED;
-
 #[tokio::main(flavor = "multi_thread", worker_threads = 4)]
 async fn main() {
     dotenv().ok();
@@ -32,9 +30,6 @@ async fn main() {
     if let Some(exit_code) = utils::cli::parse_args().await {
         std::process::exit(exit_code);
     }
-
-    // Init Bot
-    GLOBAL_MEDIA_PLAYER.init_self().await;
 
     // Logging
     let file_appender = tracing_appender::rolling::never("", logging::get_log_filename());
@@ -48,13 +43,19 @@ async fn main() {
     .expect("Unable to set global tracing subscriber");
 
     // Framework
+    let db_plugin = Arc::new(SQLitePlugin::default());
+    let media_player_plugin = Arc::new(GlobalMediaPlayer::UNINITIALIZED);
+    media_player_plugin.init_self().await;
+
     let intents =
         serenity::GatewayIntents::non_privileged() | serenity::GatewayIntents::MESSAGE_CONTENT;
 
-    let db_plugin = Arc::new(SQLitePlugin::default());
-
     let framework = poise::Framework::builder()
-        .client_settings(|c| c.register_songbird().register_database_plugin(db_plugin))
+        .client_settings(|c| {
+            c.register_songbird()
+                .register_database_plugin(db_plugin)
+                .register_media_player_plugin(media_player_plugin)
+        })
         .token(std::env::var("DISCORD_TOKEN").expect("missing DISCORD_TOKEN"))
         .user_data_setup(move |ctx, _ready, framework| {
             Box::pin(async move {
@@ -106,18 +107,18 @@ async fn main() {
         })
         .options(poise::FrameworkOptions {
             commands: vec![
-                play(),
-                play_single(),
-                queue(),
-                now_playing(),
-                timestamp(),
-                history(),
-                play_history(),
+                media::commands::play(),
+                media::commands::play_single(),
+                media::commands::seek(),
+                media::commands::skip(),
+                media::commands::queue(),
+                media::commands::now_playing(),
+                media::commands::timestamp(),
+                database::commands::history(),
+                database::commands::play_history(),
                 database::commands::playlists(),
-                seek(),
-                skip(),
-                join(),
-                leave(),
+                controls::commands::join(),
+                controls::commands::leave(),
                 controls::commands::mute(),
                 controls::commands::unmute(),
                 controls::commands::deafen(),
@@ -137,130 +138,6 @@ async fn main() {
         .intents(intents);
 
     framework.run().await.unwrap();
-}
-
-// Media
-#[command(
-    slash_command,
-    prefix_command,
-    aliases("p"),
-    broadcast_typing,
-    category = "media"
-)]
-async fn play(
-    ctx: Context<'_>,
-    #[description = "Query or url"]
-    #[rest]
-    song: String,
-) -> CommandResult {
-    media::commands::play_command(&GLOBAL_MEDIA_PLAYER, ctx, &song, true).await
-}
-
-#[command(
-    slash_command,
-    prefix_command,
-    rename = "play-single",
-    aliases("ps"),
-    broadcast_typing,
-    category = "media"
-)]
-async fn play_single(
-    ctx: Context<'_>,
-    #[description = "Query or url"] song: Vec<String>,
-) -> CommandResult {
-    media::commands::play_command(&GLOBAL_MEDIA_PLAYER, ctx, &song.join(" "), false).await
-}
-
-#[command(slash_command, prefix_command, broadcast_typing, category = "media")]
-async fn skip(ctx: Context<'_>) -> CommandResult {
-    media::commands::skip(&GLOBAL_MEDIA_PLAYER, ctx).await
-}
-
-#[command(slash_command, prefix_command, category = "media")]
-async fn seek(ctx: Context<'_>, #[description = "Timestampe"] to: String) -> CommandResult {
-    media::commands::seek(&GLOBAL_MEDIA_PLAYER, ctx, &to).await
-}
-
-#[command(slash_command, prefix_command, category = "media")]
-async fn queue(
-    ctx: Context<'_>,
-    #[description = "Page #"]
-    #[min = 1]
-    page: Option<i64>,
-) -> CommandResult {
-    let Some(page) = validate_page(ctx,page).await else {
-        return Ok(());
-    };
-
-    media::commands::queue(&GLOBAL_MEDIA_PLAYER, ctx, page).await
-}
-
-#[command(
-    slash_command,
-    prefix_command,
-    rename = "now-playing",
-    aliases("np"),
-    category = "media"
-)]
-async fn now_playing(ctx: Context<'_>) -> CommandResult {
-    media::commands::now_playing(&GLOBAL_MEDIA_PLAYER, ctx).await
-}
-
-#[command(slash_command, prefix_command, category = "media")]
-async fn timestamp(ctx: Context<'_>) -> CommandResult {
-    media::commands::timestamp(&GLOBAL_MEDIA_PLAYER, ctx).await
-}
-
-// Playlists
-
-#[command(slash_command, prefix_command, category = "playlists")]
-async fn history(
-    ctx: Context<'_>,
-    #[description = "Page #"]
-    #[min = 1]
-    page: Option<i64>,
-) -> CommandResult {
-    let Some(page) = validate_page(ctx,page).await else {
-        return Ok(());
-    };
-
-    database::commands::history(ctx, page).await
-}
-
-#[command(
-    slash_command,
-    prefix_command,
-    rename = "play-history",
-    category = "playlists"
-)]
-async fn play_history(
-    ctx: Context<'_>,
-    #[description = "Index #"]
-    #[min = 1]
-    index: i64,
-) -> CommandResult {
-    if index < 1 {
-        ctx.error("Index cannot be less than 1").await;
-        return Ok(());
-    }
-
-    if let Some(song) = database::commands::get_history(ctx, index as usize - 1).await {
-        return media::commands::play_command(&GLOBAL_MEDIA_PLAYER, ctx, &song, false).await;
-    }
-
-    Ok(())
-}
-
-// Controls
-
-#[command(slash_command, prefix_command, category = "controls")]
-async fn join(ctx: Context<'_>) -> CommandResult {
-    controls::join(&GLOBAL_MEDIA_PLAYER, ctx).await
-}
-
-#[command(slash_command, prefix_command, category = "controls")]
-async fn leave(ctx: Context<'_>) -> CommandResult {
-    controls::leave(&GLOBAL_MEDIA_PLAYER, ctx).await
 }
 
 // Misc and tools
@@ -298,19 +175,4 @@ async fn help(
     )
     .await?;
     Ok(())
-}
-
-// Util
-async fn validate_page(ctx: Context<'_>, page: Option<i64>) -> Option<usize> {
-    let page = match page {
-        Some(page) => page,
-        None => 1,
-    };
-
-    if page <= 0 {
-        ctx.warn("Page no must be atleast 1").await;
-        return None;
-    }
-
-    Some(page as usize - 1)
 }

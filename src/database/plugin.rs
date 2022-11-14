@@ -69,6 +69,12 @@ pub trait DatabasePlugin: Sync + Send {
         offset: usize,
     ) -> Result<(Vec<String>, usize), DBError>;
 
+    fn search_playlists(
+        &self,
+        user_id: UserId,
+        search_term: &String,
+    ) -> Result<Vec<String>, DBError>;
+
     fn add_playlist_songs(
         &self,
         user_id: UserId,
