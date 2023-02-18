@@ -9,6 +9,7 @@ RUN pip install youtube-dl
 
 COPY . /app
 WORKDIR /app/
+ENV PATH="/app/yt-dlp-linux/:$PATH"
 
 RUN cargo build --release
 
