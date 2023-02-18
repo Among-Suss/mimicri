@@ -5,11 +5,10 @@ ENV DEBCONF_NONINTERACTIVE_SEEN true
 
 RUN apt update
 RUN apt install -y ffmpeg cmake python3-pip
-RUN pip install youtube-dl
+RUN pip install yt-dlp
 
 COPY . /app
 WORKDIR /app/
-ENV PATH="/app/yt-dlp-linux/:$PATH"
 
 RUN cargo build --release
 

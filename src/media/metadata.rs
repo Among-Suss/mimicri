@@ -4,6 +4,8 @@ use tracing::error;
 
 use super::media_info::{MediaInfo, PlaylistInfo};
 
+const YOUTUBE_DL_COMMAND: &str = "yt-dlp";
+
 #[derive(Serialize, Deserialize)]
 struct YoutubeDLJson {
     id: Option<String>,
@@ -74,7 +76,7 @@ impl From<YoutubeDLFlatJson> for MediaInfo {
 }
 
 pub fn get_info(url: &String) -> Result<MediaInfo, String> {
-    match process::Command::new("youtube-dl")
+    match process::Command::new(YOUTUBE_DL_COMMAND)
         .arg("-j")
         .arg("--no-playlist")
         .arg(url)
@@ -115,7 +117,7 @@ pub fn get_search(query: &String) -> Result<MediaInfo, String> {
 pub fn get_playlist(url: &String) -> Result<LinkedList<MediaInfo>, String> {
     let mut sources: LinkedList<MediaInfo> = LinkedList::new();
 
-    match process::Command::new("youtube-dl")
+    match process::Command::new(YOUTUBE_DL_COMMAND)
         .arg("-j")
         .arg("--playlist-end=1")
         .arg(&url)
@@ -143,7 +145,7 @@ pub fn get_playlist(url: &String) -> Result<LinkedList<MediaInfo>, String> {
         }
     }
 
-    match process::Command::new("youtube-dl")
+    match process::Command::new(YOUTUBE_DL_COMMAND)
         .arg("-j")
         .arg("--flat-playlist")
         .arg(&url)
