@@ -30,7 +30,7 @@ features = ["client", "voice", "rustls_backend"]
 
 [dependencies.songbird]
 version = "0.3"
-features = ["yt-dlp"]
+# features = ["yt-dlp"]
 
 [dependencies.poise]
 version = "0.4.1"
