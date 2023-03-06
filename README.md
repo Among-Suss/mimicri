@@ -2,8 +2,6 @@
 
 [![Version](https://img.shields.io/docker/v/poohcom1/mimicri?color=blue&logo=docker&style=flat-square)](https://hub.docker.com/repository/docker/poohcom1/mimicri)
 
-_THIS PROJECT IS UNDER HEAVY DEVELOPMENT_
-
 A small, performant, easy to host Discord music bot written in Rust with multi-server history database functionality.
 
 # Features
