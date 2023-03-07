@@ -357,7 +357,7 @@ async fn queue_history(
 
     if let Ok((history, count)) = db.get_history(ctx.author().id, 1, (index - 1) as usize) {
         if history.len() > 0 {
-            media::commands::play_command(ctx, &history[0].url.clone(), false).await?;
+            media::commands::play_command(ctx, &history[0].url.clone(), false, false).await?;
         } else {
             ctx.warn(format!(
                 "Song index not found. History contains {} songs.",

@@ -34,7 +34,7 @@ pub async fn play(
     #[rest]
     song: String,
 ) -> CommandResult {
-    media::commands::play_command(ctx, &song, true).await
+    media::commands::play_command(ctx, &song, true, false).await
 }
 
 /// Queue a single song, ignoring playlists
@@ -50,7 +50,23 @@ pub async fn play_single(
     ctx: Context<'_>,
     #[description = "Query or url"] song: Vec<String>,
 ) -> CommandResult {
-    media::commands::play_command(ctx, &song.join(" "), false).await
+    media::commands::play_command(ctx, &song.join(" "), false, false).await
+}
+
+#[command(
+    slash_command,
+    prefix_command,
+    rename = "play-next",
+    aliases("pn"),
+    broadcast_typing,
+    category = "media"
+)]
+pub async fn play_next(
+    ctx: Context<'_>,
+    #[description = "Query or url"] song: Vec<String>,
+) -> CommandResult {
+    // TODO: Play next entire playlist
+    media::commands::play_command(ctx, &song.join(" "), false, true).await
 }
 
 pub async fn check_or_join_vc(ctx: Context<'_>) -> Result<(), String> {
@@ -97,7 +113,12 @@ pub async fn check_or_join_vc(ctx: Context<'_>) -> Result<(), String> {
     Ok(())
 }
 
-pub async fn play_command(ctx: Context<'_>, url: &String, allow_playlist: bool) -> CommandResult {
+pub async fn play_command(
+    ctx: Context<'_>,
+    url: &String,
+    allow_playlist: bool,
+    play_next: bool,
+) -> CommandResult {
     ctx.defer_ephemeral()
         .await
         .expect("Failed to defer message");
@@ -121,7 +142,16 @@ pub async fn play_command(ctx: Context<'_>, url: &String, allow_playlist: bool) 
 
     let db_plugin = get_db_plugin(ctx.discord()).await.unwrap().clone();
 
-    match queue_variant(guild.id, &url, message_ctx, &media_player, allow_playlist).await {
+    match queue_variant(
+        guild.id,
+        &url,
+        message_ctx,
+        &media_player,
+        allow_playlist,
+        play_next,
+    )
+    .await
+    {
         Ok(infos) => {
             let count = infos.len();
 
@@ -182,6 +212,7 @@ async fn queue_variant(
     message_ctx: MessageContext,
     media_player: &GlobalMediaPlayer,
     allow_playlists: bool,
+    play_next: bool,
 ) -> Result<Vec<MediaInfo>, String> {
     if allow_playlists && metadata::is_playlist(query) {
         let infos = match metadata::get_playlist(query) {
@@ -211,9 +242,15 @@ async fn queue_variant(
             }
         };
 
-        media_player
-            .enqueue(guild_id, info.clone(), message_ctx)
-            .await?;
+        if !play_next {
+            media_player
+                .enqueue(guild_id, info.clone(), message_ctx)
+                .await?;
+        } else {
+            media_player
+                .enqueue_next(guild_id, info.clone(), message_ctx)
+                .await?;
+        }
 
         Ok(vec![info])
     }
@@ -269,6 +306,26 @@ pub async fn skip(ctx: Context<'_>) -> CommandResult {
 
     match res {
         Ok(_) => ctx.info("Skipped current song!").await,
+        Err(err) => ctx.error(err).await,
+    }
+
+    Ok(())
+}
+
+/// Clear the queue
+#[command(slash_command, prefix_command, broadcast_typing, category = "media")]
+pub async fn clear(ctx: Context<'_>) -> CommandResult {
+    let guild = ctx.guild().unwrap();
+    let guild_id = guild.id;
+
+    let res = get_media_player(ctx.discord())
+        .await
+        .unwrap()
+        .clear(guild_id)
+        .await;
+
+    match res {
+        Ok(_) => ctx.info("Cleared the queue!").await,
         Err(err) => ctx.error(err).await,
     }
 

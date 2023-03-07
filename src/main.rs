@@ -109,9 +109,11 @@ async fn main() {
             commands: vec![
                 media::commands::play(),
                 media::commands::play_single(),
+                media::commands::play_next(),
                 media::commands::seek(),
                 media::commands::skip(),
                 media::commands::queue(),
+                media::commands::clear(),
                 media::commands::now_playing(),
                 media::commands::timestamp(),
                 database::commands::history(),

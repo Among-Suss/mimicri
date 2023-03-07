@@ -180,6 +180,40 @@ impl GlobalMediaPlayer {
 
         Ok(())
     }
+
+    pub async fn enqueue_next(
+        &self,
+        guild_id: GuildId,
+        info: MediaInfo,
+        message_ctx: MessageContext,
+    ) -> Result<(), String> {
+        let mut guild_map_guard = self.guild_media_player_map.lock().await;
+        let guild_map = guild_map_guard.as_mut().unwrap();
+
+        if let Some(media_player) = guild_map.get(&guild_id) {
+            media_player.enqueue_next(info, message_ctx).await;
+        } else {
+            return Err("Not connected to a voice channel!".to_string());
+        }
+
+        Ok(())
+    }
+
+    pub async fn clear(
+        &self,
+        guild_id: GuildId,
+    ) -> Result<(), String> {
+        let mut guild_map_guard = self.guild_media_player_map.lock().await;
+        let guild_map = guild_map_guard.as_mut().unwrap();
+
+        if let Some(media_player) = guild_map.get(&guild_id) {
+            media_player.clear().await;
+        } else {
+            return Err("Not connected to a voice channel!".to_string());
+        }
+
+        Ok(())
+    }
 }
 
 #[async_trait]
@@ -334,6 +368,21 @@ impl ChannelMediaPlayer {
         shared_media_queue_condvar.notify_one();
     }
 
+    async fn enqueue_next(&self, info: MediaInfo, message_ctx: MessageContext) {
+        let (shared_media_queue_lock, shared_media_queue_condvar) =
+            &self.lock_protected_media_queue;
+
+        info!("Enqueuing song next: {}", &info.title);
+
+        let mut smq_locked = shared_media_queue_lock.lock().await;
+
+        smq_locked
+            .queue
+            .push_back(Some(MediaItem { info, message_ctx }));
+
+        shared_media_queue_condvar.notify_one();
+    }
+
     async fn enqueue_batch(
         &self,
         mut media_infos: LinkedList<MediaInfo>,
@@ -354,6 +403,17 @@ impl ChannelMediaPlayer {
                 message_ctx: message_ctx.clone(),
             }));
         }
+
+        shared_media_queue_condvar.notify_one();
+    }
+
+    async fn clear(&self) {
+        let (shared_media_queue_lock, shared_media_queue_condvar) =
+            &self.lock_protected_media_queue;
+
+        let mut smq_locked = shared_media_queue_lock.lock().await;
+
+        smq_locked.queue.clear();
 
         shared_media_queue_condvar.notify_one();
     }
