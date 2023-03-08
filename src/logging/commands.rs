@@ -7,7 +7,7 @@ use crate::{utils::responses::Responses, CommandResult, Context};
 
 /// Print the log. Use --help to see args
 #[command(prefix_command, category = "debug")]
-pub async fn log(ctx: Context<'_>, #[rest] args: String) -> CommandResult {
+pub async fn log(ctx: Context<'_>, #[rest] args: Option<String>) -> CommandResult {
     let mut level = "".to_string();
     let mut target = "".to_string();
     let mut from: usize = 0;
@@ -16,26 +16,28 @@ pub async fn log(ctx: Context<'_>, #[rest] args: String) -> CommandResult {
     let mut target_flag = false;
     let mut from_flag = false;
 
-    for arg in args.split(" ") {
-        if arg == "-h" || arg == "--help" {
-            ctx.info(super::format_help_message()).await;
+    if let Some(arg_str) = args {
+        for arg in arg_str.split(" ") {
+            if arg == "-h" || arg == "--help" {
+                ctx.info(super::format_help_message()).await;
 
-            return Ok(());
-        } else if arg == "-l" || arg == "--level" {
-            level_flag = true;
-        } else if arg == "-t" || arg == "--target" {
-            target_flag = true;
-        } else if arg == "-f" || arg == "--from" {
-            from_flag = true;
-        } else if level_flag {
-            level = arg.to_string();
-            level_flag = false;
-        } else if target_flag {
-            target = arg.to_string();
-            target_flag = false;
-        } else if from_flag {
-            from = arg.parse::<usize>().unwrap_or_default();
-            from_flag = false;
+                return Ok(());
+            } else if arg == "-l" || arg == "--level" {
+                level_flag = true;
+            } else if arg == "-t" || arg == "--target" {
+                target_flag = true;
+            } else if arg == "-f" || arg == "--from" {
+                from_flag = true;
+            } else if level_flag {
+                level = arg.to_string();
+                level_flag = false;
+            } else if target_flag {
+                target = arg.to_string();
+                target_flag = false;
+            } else if from_flag {
+                from = arg.parse::<usize>().unwrap_or_default();
+                from_flag = false;
+            }
         }
     }
 

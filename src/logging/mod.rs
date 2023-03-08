@@ -26,10 +26,9 @@ pub async fn get_logs(level: String, target: String, start: usize) -> (String, S
                 .into_iter()
                 .filter(|l| l.level == "ERROR" || l.level == "WARN")
                 .collect(),
-            "INFO" => logs,
-            "" | _ => {
+            "INFO" | "" => logs,
+            _ => {
                 level_flag = true;
-
                 logs
             }
         };

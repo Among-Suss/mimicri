@@ -53,6 +53,7 @@ pub async fn play_single(
     media::commands::play_command(ctx, &song.join(" "), false, false).await
 }
 
+/// Adds a song to the front of the queue
 #[command(
     slash_command,
     prefix_command,
