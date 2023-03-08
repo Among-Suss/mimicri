@@ -53,6 +53,24 @@ def check_staged_changes() -> bool:
     return len(subprocess.run(["git", "diff", "--name-only", "--cached"], capture_output=True).stdout) > 0
 
 
+def push():
+    print("[Info]\tPulling to check... ", end="")
+
+    pull_process = subprocess.run(
+        ["git", "pull"], capture_output=True)
+
+    if "up to date." in str(pull_process.stdout):
+        print("ok.")
+    else:
+        print("warning.")
+        print(
+            "Remote contains changes not present in local. Make sure remote is update before bumping")
+        exit(1)
+
+    print("[Info]\tPushing to origin...")
+    subprocess.check_output(["git", "push", "origin", "main", "--tags"])
+
+
 # Main:
 try:
     subprocess.check_output(['cargo', 'bump', '--version'])
@@ -66,6 +84,7 @@ sub_parsers = parser.add_subparsers(dest="command")
 
 bump_parser = sub_parsers.add_parser(name="bump")
 undo_parser = sub_parsers.add_parser(name="undo")
+push_parser = sub_parsers.add_parser(name="push")
 
 bump_parser.add_argument("-t", "--type", choices=bump_types, default="",
                          help="Whether to bump patch, minor, or major versions.")
@@ -154,21 +173,7 @@ if args.command == "bump":
             args.push = True
 
     if args.push:
-        print("[Info]\tPulling to check... ", end="")
-
-        pull_process = subprocess.run(
-            ["git", "pull"], capture_output=True)
-
-        if "Already up to date." in str(pull_process.stdout):
-            print("ok.")
-        else:
-            print("warning.")
-            print(
-                "Remote contains changes not present in local. Make sure remote is update before bumping")
-            exit(1)
-
-        print("[Info]\tPushing to origin...")
-        subprocess.check_output(["git", "push", "origin", "main", "--tags"])
+        push()
     else:
         print("[Info]\tApplied changes locally. Run 'git push origin main --tags' to push tags to remote and trigger a workflow.")
 
@@ -211,7 +216,8 @@ elif args.command == "undo":
         print("[Error]\tUnable to undo. Previous commit isn't tagged.")
 
         exit(1)
-
+elif args.command == "push":
+    push()
 elif args.command is None:
     parser.print_help()
     exit(0)
