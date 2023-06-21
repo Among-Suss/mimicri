@@ -2,7 +2,6 @@ use crate::Context;
 
 use self::responses::Responses;
 
-pub mod cli;
 pub mod config;
 pub mod message_context;
 pub mod responses;
