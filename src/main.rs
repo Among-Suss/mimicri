@@ -26,10 +26,6 @@ pub struct UserData {}
 #[tokio::main(flavor = "multi_thread", worker_threads = 4)]
 async fn main() {
     dotenv().ok();
-    // CLI tools
-    if let Some(exit_code) = utils::cli::parse_args().await {
-        std::process::exit(exit_code);
-    }
 
     // Logging
     let file_appender = tracing_appender::rolling::never("", logging::get_log_filename());
