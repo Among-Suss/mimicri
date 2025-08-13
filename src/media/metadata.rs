@@ -95,7 +95,7 @@ pub fn get_info(url: &String) -> Result<MediaInfo, String> {
 
             match json_result {
                 Err(err) => {
-                    error!("[metadata] [youtube-dl] {}", err);
+                    error!("[metadata] [youtube-dl] [json parse error] {}", output_str);
                     Err("Unable to parse json".to_string())
                 }
                 Ok(json) => {

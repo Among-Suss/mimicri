@@ -93,7 +93,7 @@ async fn main() {
                         .id()
                         .say(
                             &ctx.http,
-                            format!("Bot start. Version: {}", &env!("VERGEN_GIT_SEMVER")),
+                            format!("Bot started! Version: {}", &env!("VERGEN_GIT_SEMVER")),
                         )
                         .await
                         .expect("Failed to send startup message");
@@ -122,6 +122,7 @@ async fn main() {
                 controls::commands::undeafen(),
                 logging::commands::log(),
                 logging::commands::log_file(),
+                update(),
                 help(),
                 version(),
                 register(),
@@ -145,6 +146,22 @@ async fn version(ctx: Context<'_>) -> CommandResult {
         .await;
 
     Ok(())
+}
+
+#[command(prefix_command, category = "debug")]
+async fn update(ctx: Context<'_>) -> CommandResult {
+    // spawn yt-dlp --update
+    let cmd = std::process::Command::new("sh")
+        .arg("-c")
+        .arg("echo hello")
+        .output()
+        .expect("failed to execute process");
+
+    ctx.send(|m| m.content(String::from_utf8(cmd.stdout).unwrap()))
+        .await
+        .expect("Failed to send message");
+
+    CommandResult::Ok(())
 }
 
 /// Registers or unregisters application commands in this guild or globally
