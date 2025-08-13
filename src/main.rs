@@ -151,9 +151,8 @@ async fn version(ctx: Context<'_>) -> CommandResult {
 #[command(prefix_command, category = "debug")]
 async fn update(ctx: Context<'_>) -> CommandResult {
     // spawn yt-dlp --update
-    let cmd = std::process::Command::new("sh")
-        .arg("-c")
-        .arg("echo hello")
+    let cmd = std::process::Command::new("yt-dlp")
+        .arg("--update")
         .output()
         .expect("failed to execute process");
 
